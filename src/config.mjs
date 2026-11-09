@@ -41,6 +41,8 @@ export function loadEnvOnce() {
 export function loadConfig() {
   loadEnvOnce();
   const pick = (name) => (process.env[name] ?? '').trim();
+  const rateLimitRaw = pick('RATE_LIMIT_PER_MIN');
+  const rateLimitNumber = Number(rateLimitRaw);
 
   return {
     root: ROOT,
@@ -58,12 +60,15 @@ export function loadConfig() {
     webhookUrl: pick('WEBHOOK_URL'),
     webhookPort: Number(pick('WEBHOOK_PORT')) || 8443,
     webhookSecret: pick('WEBHOOK_SECRET'),
-    // Empty list means "answer everyone"; otherwise only these chat ids are served.
+    // Empty list is private by default: only /start, /help and /id are allowed for setup.
     allowedChatIds: pick('ALLOWED_CHAT_IDS')
       .split(',')
       .map((value) => Number(value.trim()))
-      .filter((value) => Number.isFinite(value) && value !== 0),
-    rateLimitPerMin: Number(pick('RATE_LIMIT_PER_MIN')) || 12,
+      .filter((value) => Number.isSafeInteger(value) && value !== 0),
+    allowPublicChats: pick('ALLOW_PUBLIC_CHATS').toLowerCase() === 'true',
+    rateLimitPerMin: rateLimitRaw === ''
+      ? 12
+      : Number.isFinite(rateLimitNumber) ? Math.max(0, Math.floor(rateLimitNumber)) : 12,
   };
 }
 
