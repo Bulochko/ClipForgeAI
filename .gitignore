@@ -1,0 +1,12 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# dependencies
+node_modules/
+
+# logs and runtime state
+*.log
+data/
+state/
