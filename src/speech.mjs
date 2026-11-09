@@ -190,10 +190,13 @@ async function geminiTranscribe(input, inputExt, key) {
   const model = (process.env.GEMINI_STT_MODEL ?? '').trim() || 'gemini-3.5-transcribe';
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': key,
+      },
       body: JSON.stringify({
         contents: [
           {
