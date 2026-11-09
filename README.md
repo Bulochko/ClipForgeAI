@@ -1,19 +1,23 @@
 # Lyra AI
 
-Telegram-ассистент с мостом к DeepSeek Harness: сообщение из Telegram превращается
-в один запуск агента (`dsh headless`), ответ возвращается в чат. У агента есть доступ
-к файлам и терминалу в рабочей папке.
+Telegram-ассистент с маршрутизацией между Gemini, Groq, OpenRouter, DeepSeek API
+и локальным DeepSeek Harness. Сообщения проходят через единый интерфейс провайдеров,
+а ответы возвращаются в Telegram. Локальный агент дополнительно может работать
+с файлами и терминалом в выбранной рабочей папке.
 
 ## Как это работает
 
 ```
-Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──►  ответ  ──►  Telegram
+Telegram  ──►  bot.mjs  ──►  providers.mjs  ──►  AI provider  ──►  Telegram
 ```
 
 - `src/config.mjs` — читает `.env`, без внешних зависимостей.
 - `src/telegram.mjs` — клиент Bot API на `fetch`: long polling, повторы, разбивка длинных ответов.
-- `src/agent.mjs` — запуск `dsh headless` с таймаутом и очисткой служебного вывода.
-- `src/bot.mjs` — маршрутизация сообщений, контекст диалога, индикатор «печатает».
+- `src/agent.mjs` — локальный запуск `dsh headless` с ограниченным окружением и таймаутом.
+- `src/providers.mjs` — единый интерфейс Gemini, Groq, OpenRouter, DeepSeek и агента.
+- `src/speech.mjs` / `src/image.mjs` — распознавание, озвучка и генерация изображений.
+- `src/webhook.mjs` — защищённый Telegram webhook с дисковой очередью.
+- `src/bot.mjs` — маршрутизация сообщений, временный контекст и команды.
 
 ## Настройка
 
@@ -28,7 +32,10 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 | Переменная | Назначение |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | токен бота, обязателен |
-| `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен для DeepSeek API |
+| `GEMINI_API_KEY` | ключ Gemini для чата, распознавания и TTS |
+| `GROQ_API_KEY` | ключ Groq для чата и Whisper |
+| `OPENROUTER_API_KEY` | ключ OpenRouter для чата |
+| `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен для DeepSeek API и локального агента |
 | `POLLINATIONS_API_KEY` | секретный серверный ключ Pollinations (`sk_`) для изображений |
 | `TELEGRAM_PROXY` | необязательный прокси (`http://host:port`); включается через `NODE_USE_ENV_PROXY=1` |
 | `AGENT_WORKSPACE` | папка, в которой работает агент (по умолчанию корень репозитория) |
@@ -41,7 +48,7 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 
 - обычный текст — вопрос выбранной модели;
 - `/img <описание>` — генерация картинки через Pollinations (нужен `POLLINATIONS_API_KEY`);
-- `/sticker <описание>` — генерация стикера 512×512 WebP;
+- `/sticker <описание>` — генерация стикера 512×512 WebP через Pollinations (нужен API-ключ);
 - `/voice <текст>` — озвучка текста (Gemini TTS, запасной — Google Translate);
 - голосовое сообщение, видеокружок или аудио — распознаётся через Gemini
   (`gemini-3.5-transcribe`), при его отсутствии — через Whisper на Groq,
@@ -67,7 +74,7 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 всё ещё может читать файлы, доступные пользователю ОС.
 
 `RATE_LIMIT_PER_MIN` (по умолчанию 12) ограничивает число запросов от одного чата в минуту —
-это защищает бесплатные квоты моделей от случайного исчерпания. `0` отключает лимит.
+это снижает риск случайно исчерпать квоты или потратить лишние средства. `0` отключает лимит.
 
 ## Модели
 
