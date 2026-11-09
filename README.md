@@ -124,6 +124,7 @@ sudo cat /home/lyra/.ssh/id_ed25519.pub
 sudo -u lyra git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
 cd /opt/lyra-ai
 sudo -u lyra cp .env.example .env
+sudo -u lyra chmod 600 .env
 sudo nano .env          # заполнить токен, ключи, WEBHOOK_URL, WEBHOOK_SECRET
 sudo docker compose up -d --build
 ```
@@ -134,6 +135,7 @@ sudo docker compose up -d --build
 sudo -u lyra git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
 cd /opt/lyra-ai
 sudo -u lyra cp .env.example .env
+sudo -u lyra chmod 600 .env
 sudo nano .env
 sudo bash deploy/setup.sh
 journalctl -u lyra-ai -f
