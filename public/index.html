@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lyra AI — Telegram-ассистент</title>
+    <meta name="description" content="Lyra AI — Telegram-бот с бесплатными языковыми моделями, картинками, голосом и стикерами." />
+    <style>
+      :root {
+        --bg: #0b0f16;
+        --panel: #121a26;
+        --text: #eef2f8;
+        --muted: #93a3b8;
+        --accent: #6ea8fe;
+        --line: #1e2a3a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(1200px 600px at 20% -10%, #16243a 0%, var(--bg) 60%);
+        color: var(--text);
+        font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+        padding: 48px 20px 80px;
+      }
+      main { max-width: 760px; margin: 0 auto; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 999px;
+        padding: 6px 14px;
+        margin-bottom: 24px;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
+      h1 { font-size: 42px; line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.02em; }
+      h1 span { color: var(--accent); }
+      p.lead { color: var(--muted); font-size: 18px; margin: 0 0 28px; max-width: 60ch; }
+      .cta {
+        display: inline-block;
+        background: var(--accent);
+        color: #06101f;
+        font-weight: 600;
+        text-decoration: none;
+        padding: 12px 22px;
+        border-radius: 12px;
+        margin-bottom: 40px;
+      }
+      .cta:hover { background: #8dbcff; }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 14px; }
+      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+      .card h3 { margin: 0 0 6px; font-size: 16px; }
+      .card p { margin: 0; color: var(--muted); font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; font-size: 15px; }
+      td { padding: 10px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      td:first-child { width: 40%; color: var(--accent); font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+      td:last-child { color: var(--muted); }
+      footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+      footer a { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="badge"><span class="dot"></span> работает на бесплатных тирах моделей</div>
+
+      <h1>Lyra <span>AI</span></h1>
+      <p class="lead">
+        Telegram-ассистент: отвечает текстом, рисует картинки и стикеры, слушает голосовые
+        и видеокружки, озвучивает ответы. Никаких платных подписок — только бесплатные
+        лимиты Gemini, Groq и Pollinations.
+      </p>
+
+      <a class="cta" href="https://t.me/LigeiaAI">Открыть @LigeiaAI</a>
+
+      <h2>Что умеет</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Диалог</h3>
+          <p>Текст через Gemini или Groq, с сохранением контекста и переключением модели.</p>
+        </div>
+        <div class="card">
+          <h3>Голос</h3>
+          <p>Распознаёт голосовые и видеокружки, отвечает текстом и голосом.</p>
+        </div>
+        <div class="card">
+          <h3>Медиа</h3>
+          <p>Генерирует картинки и стикеры 512×512 без ключей и квот.</p>
+        </div>
+        <div class="card">
+          <h3>Агент</h3>
+          <p>На локальной машине получает доступ к файлам и терминалу.</p>
+        </div>
+      </div>
+
+      <h2>Команды</h2>
+      <table>
+        <tr><td>/img &lt;описание&gt;</td><td>сгенерировать картинку</td></tr>
+        <tr><td>/sticker &lt;описание&gt;</td><td>сгенерировать стикер</td></tr>
+        <tr><td>/voice &lt;текст&gt;</td><td>озвучить текст</td></tr>
+        <tr><td>/model</td><td>список моделей и переключение</td></tr>
+        <tr><td>/reset</td><td>очистить контекст диалога</td></tr>
+        <tr><td>/id</td><td>показать chat_id</td></tr>
+      </table>
+
+      <footer>
+        Исходный код: <a href="https://github.com/Bulochko/Lyra-AI">github.com/Bulochko/Lyra-AI</a>
+      </footer>
+    </main>
+  </body>
+</html>
