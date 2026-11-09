@@ -93,6 +93,37 @@ export class Telegram {
     return payload.result;
   }
 
+  /** Upload an OGG/Opus buffer as a voice message. */
+  async sendVoice(chatId, { buffer, filename = 'voice.ogg', duration }) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    if (duration) form.set('duration', String(Math.round(duration)));
+    form.set('voice', new Blob([buffer], { type: 'audio/ogg' }), filename);
+    return this.upload('sendVoice', form);
+  }
+
+  /** Upload a WebP buffer as a sticker. */
+  async sendSticker(chatId, { buffer, filename = 'sticker.webp', emoji }) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    if (emoji) form.set('emoji', emoji);
+    form.set('sticker', new Blob([buffer], { type: 'image/webp' }), filename);
+    return this.upload('sendSticker', form);
+  }
+
+  async upload(method, form) {
+    const response = await fetch(`${this.apiBase}/bot${this.token}/${method}`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(`${method}: HTTP ${response.status} ${payload?.description ?? ''}`.trim());
+    }
+    return payload.result;
+  }
+
   /** Resolve a Telegram file_id to a temporary download path. */
   async getFile(fileId) {
     const result = await this.call('getFile', { file_id: fileId });

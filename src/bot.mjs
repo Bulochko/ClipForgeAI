@@ -5,6 +5,9 @@ import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
 import { askAgent, describeLauncher } from './agent.mjs';
 import { chat as runChat, PROVIDERS, availableProviders } from './providers.mjs';
 import { generateImage } from './image.mjs';
+import { textToSpeech, speechToText } from './speech.mjs';
+import { makeSticker } from './sticker.mjs';
+import { ffmpegAvailable } from './ffmpeg.mjs';
 
 const config = loadConfig();
 const stateDir = join(config.root, 'data');
@@ -41,8 +44,11 @@ console.log(
     .join(', ')} (по умолчанию: ${config.defaultProvider})`,
 );
 
-const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, requestTimeoutMs: 15_000 });
-probe
+if (!(await ffmpegAvailable())) {
+  console.warn('[warn] ffmpeg не найден: голосовые, видеокружки и стикеры будут недоступны.');
+}
+
+const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, requestTimeoutMs: 15_000 });probe
   .call('getMe', {}, { retries: 0 })
   .then((me) => console.log(`Карточка бота: @${me?.username ?? '?'}`))
   .catch((error) => console.error(`[getMe] ${error.message}`));
@@ -72,8 +78,16 @@ async function poll() {
 async function handleUpdate(update) {
   const message = update.message;
   const chatId = message?.chat?.id;
+  if (!chatId) return;
+
+  const audio = message.voice ?? message.video_note ?? message.audio;
+  if (audio) {
+    await handleAudioMessage(chatId, audio, message);
+    return;
+  }
+
   const text = message?.text?.trim();
-  if (!chatId || !text) return;
+  if (!text) return;
 
   if (text === '/start' || text === '/help') {
     await tg.sendMessage(chatId, helpText());
@@ -90,6 +104,14 @@ async function handleUpdate(update) {
   }
   if (text.startsWith('/img') || text.startsWith('/image')) {
     await handleImageCommand(chatId, text.replace(/^\/(img|image)\s*/i, '').trim());
+    return;
+  }
+  if (text.startsWith('/sticker')) {
+    await handleStickerCommand(chatId, text.replace(/^\/sticker\s*/i, '').trim());
+    return;
+  }
+  if (text.startsWith('/voice')) {
+    await handleVoiceCommand(chatId, text.replace(/^\/voice\s*/i, '').trim());
     return;
   }
 
@@ -170,6 +192,111 @@ async function handleImageCommand(chatId, prompt) {
   }
 }
 
+async function handleStickerCommand(chatId, prompt) {
+  if (!prompt) {
+    await tg.sendMessage(chatId, 'Формат: /sticker <описание>');
+    return;
+  }
+  if (busy.get(chatId)) {
+    await tg.sendMessage(chatId, 'Сначала дождись предыдущего ответа.');
+    return;
+  }
+
+  busy.set(chatId, true);
+  console.log(`[sticker] chat=${chatId} chars=${prompt.length}`);
+  await tg.sendChatAction(chatId, 'choose_sticker');
+
+  try {
+    const webp = await makeSticker({ prompt });
+    await tg.sendSticker(chatId, { buffer: webp, emoji: '🙂' });
+    console.log(`[sticker] chat=${chatId} bytes=${webp.length}`);
+  } catch (error) {
+    console.error(`[sticker] ${error.message}`);
+    await tg.sendMessage(chatId, `Стикер не получился: ${truncate(error.message, 400)}`);
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+async function handleVoiceCommand(chatId, text) {
+  if (!text) {
+    await tg.sendMessage(chatId, 'Формат: /voice <текст для озвучки>');
+    return;
+  }
+  if (busy.get(chatId)) {
+    await tg.sendMessage(chatId, 'Сначала дождись предыдущего ответа.');
+    return;
+  }
+
+  busy.set(chatId, true);
+  console.log(`[voice] chat=${chatId} chars=${text.length}`);
+  await tg.sendChatAction(chatId, 'record_voice');
+
+  try {
+    const ogg = await textToSpeech(text);
+    await tg.sendVoice(chatId, { buffer: ogg });
+    console.log(`[voice] chat=${chatId} bytes=${ogg.length}`);
+  } catch (error) {
+    console.error(`[voice] ${error.message}`);
+    await tg.sendMessage(chatId, `Озвучка не получилась: ${truncate(error.message, 400)}`);
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+/** Incoming voice message, video note or audio file: transcribe it and answer. */
+async function handleAudioMessage(chatId, audio, message) {
+  if (busy.get(chatId)) {
+    await tg.sendMessage(chatId, 'Ещё работаю над предыдущим сообщением — секунду.');
+    return;
+  }
+
+  busy.set(chatId, true);
+  const label = message.video_note ? 'видеокружок' : 'голосовое';
+  console.log(`[audio] chat=${chatId} kind=${label} bytes=${audio.file_size ?? '?'}`);
+  const typing = setInterval(() => void tg.sendChatAction(chatId), 4500);
+  await tg.sendChatAction(chatId, 'typing');
+
+  try {
+    const filePath = await tg.getFile(audio.file_id);
+    if (!filePath) throw new Error('Telegram не вернул путь к файлу.');
+    const buffer = await tg.downloadFile(filePath);
+    const extension = filePath.split('.').pop()?.toLowerCase() || 'ogg';
+    const transcript = await speechToText(buffer, { inputExt: extension });
+    await tg.sendMessage(chatId, `🎧 «${truncate(transcript, 900)}»`);
+
+    const provider = providerFor(chatId);
+    const messages = [...(history.get(chatId) ?? []), { role: 'user', content: transcript }];
+    const answer = await runChat({
+      provider,
+      messages,
+      system: SYSTEM_PROMPT,
+      agentRunner: ({ prompt: agentPrompt }) =>
+        askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
+    });
+
+    for (const chunk of splitMessage(answer)) {
+      await tg.sendMessage(chatId, chunk);
+    }
+    history.set(chatId, [...messages, { role: 'assistant', content: truncate(answer, 800) }].slice(-config.historyLimit * 2));
+
+    if (answer.length <= 600) {
+      try {
+        const ogg = await textToSpeech(answer);
+        await tg.sendVoice(chatId, { buffer: ogg });
+      } catch (error) {
+        console.warn(`[audio] voice reply skipped: ${error.message}`);
+      }
+    }
+  } catch (error) {
+    console.error(`[audio] ${error.message}`);
+    await tg.sendMessage(chatId, `Не смог разобрать ${label}: ${truncate(error.message, 400)}`);
+  } finally {
+    clearInterval(typing);
+    busy.delete(chatId);
+  }
+}
+
 async function handleModelCommand(chatId, text) {
   const [, requested] = text.split(/\s+/, 2);
   const list = availableProviders();
@@ -209,8 +336,11 @@ function helpText() {
     'Lyra AI на связи.',
     '',
     'Просто напиши сообщение — отвечу выбранной моделью.',
+    'Можно прислать голосовое или видеокружок — распознаю и отвечу.',
     '',
     '/img <описание> — сгенерировать картинку',
+    '/sticker <описание> — сгенерировать стикер',
+    '/voice <текст> — озвучить текст',
     '/model — список моделей и текущая',
     '/reset — очистить контекст диалога',
     '',
