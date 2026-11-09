@@ -38,6 +38,16 @@ export function loadEnvOnce() {
   envLoaded = true;
 }
 
+/**
+ * Private-by-default access policy. When no allowlist is configured, only
+ * setup commands are accepted unless public access is explicitly enabled.
+ */
+export function isChatAllowed({ chatId, allowedChatIds = [], allowPublicChats = false, text = '' }) {
+  if (allowedChatIds.length > 0) return allowedChatIds.includes(Number(chatId));
+  if (allowPublicChats) return true;
+  return /^\/(start|help|id)(?:@\w+)?(?:\s|$)/i.test(String(text).trim());
+}
+
 export function loadConfig() {
   loadEnvOnce();
   const pick = (name) => (process.env[name] ?? '').trim();
