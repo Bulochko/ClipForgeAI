@@ -2,6 +2,7 @@
  * Provider registry: one place that knows how to talk to each LLM backend.
  * All of them are optional — a provider is usable only when its key is present.
  */
+import { agentAvailable } from './agent.mjs';
 
 export const PROVIDERS = {
   agent: {
@@ -46,7 +47,7 @@ export function providerKey(provider) {
 
 export function availableProviders() {
   return Object.entries(PROVIDERS)
-    .filter(([name, config]) => name === 'agent' || providerKey(name))
+    .filter(([name, config]) => (name === 'agent' ? agentAvailable() : Boolean(providerKey(name))))
     .map(([name, config]) => ({ name, ...config }));
 }
 
@@ -59,6 +60,9 @@ export async function chat({ provider = 'agent', messages, system, agentRunner }
   if (!config) throw new Error(`Неизвестный провайдер: ${provider}`);
 
   if (config.kind === 'agent') {
+    if (!agentAvailable()) {
+      throw new Error('Режим агента доступен только на ПК с установленным DeepSeek Harness.');
+    }
     if (!agentRunner) throw new Error('Режим агента недоступен в этой сборке.');
     const prompt = renderPrompt(messages, system);
     const { text } = await agentRunner(prompt);

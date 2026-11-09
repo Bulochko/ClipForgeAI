@@ -18,6 +18,12 @@ export function describeLauncher() {
   return existsSync(appExe) ? appExe : (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD;
 }
 
+/** The DSH agent only exists where the Desktop app is installed (the local PC). */
+export function agentAvailable() {
+  const appExe = (process.env.DSH_APP_EXE ?? '').trim() || DEFAULT_APP_EXE;
+  return existsSync(appExe);
+}
+
 function buildCommand(prompt) {
   const appExe = (process.env.DSH_APP_EXE ?? '').trim() || DEFAULT_APP_EXE;
   if (existsSync(appExe)) {

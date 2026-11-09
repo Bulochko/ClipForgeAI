@@ -1,0 +1,16 @@
+services:
+  lyra:
+    build: .
+    container_name: lyra-ai
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MODE: webhook
+      WEBHOOK_PORT: "8443"
+    ports:
+      - "127.0.0.1:8443:8443"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

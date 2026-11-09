@@ -65,6 +65,46 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 - `ffmpeg` — для голосовых, видеокружков и стикеров. Ставится через
   `winget install Gyan.FFmpeg`; модуль находит его и без обновления PATH.
 
+## Развёртывание на VPS
+
+Два варианта, оба с автоперезапуском.
+
+**Docker (проще)**
+
+```bash
+git clone https://github.com/Bulochko/Lyra-AI.git /opt/lyra-ai
+cd /opt/lyra-ai
+cp .env.example .env   # заполнить токен, ключи, WEBHOOK_URL, WEBHOOK_SECRET
+docker compose up -d --build
+```
+
+**systemd без Docker**
+
+```bash
+sudo useradd -r -m -d /opt/lyra-ai lyra
+sudo -u lyra git clone https://github.com/Bulochko/Lyra-AI.git /opt/lyra-ai
+cd /opt/lyra-ai && cp .env.example .env   # заполнить
+sudo apt install -y nodejs ffmpeg
+sudo cp deploy/lyra-ai.service /etc/systemd/system/
+sudo systemctl enable --now lyra-ai
+journalctl -u lyra-ai -f
+```
+
+**Webhook и TLS**
+
+Telegram требует HTTPS, поэтому webhook-порт слушает только localhost, а TLS
+терминирует Caddy:
+
+```bash
+sudo apt install -y caddy
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # заменить домен
+sudo systemctl reload caddy
+```
+
+В `.env`: `MODE=webhook`, `WEBHOOK_URL=https://bot.example.com/telegram`,
+`WEBHOOK_SECRET=<случайная строка>`. Без домена оставляй `MODE=polling` — polling
+на сервере работает так же надёжно и не требует сертификата.
+
 ## Ограничения
 
 - Каждое сообщение — отдельный запуск агента: полноценной сессии нет, контекст

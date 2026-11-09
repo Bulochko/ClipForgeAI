@@ -1,0 +1,9 @@
+# TLS terminator for Lyra AI webhook mode.
+# Replace bot.example.com with your domain and point its A record at the VPS.
+bot.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8443
+	log {
+		output file /var/log/caddy/lyra.log
+	}
+}

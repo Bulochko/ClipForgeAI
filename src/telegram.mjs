@@ -131,12 +131,31 @@ export class Telegram {
   }
 
   /** Download a file by its Telegram path into a Buffer. */
+  /** Download a file by its Telegram path into a Buffer. */
   async downloadFile(filePath) {
     const response = await fetch(`${this.apiBase}/file/bot${this.token}/${filePath}`, {
       signal: AbortSignal.timeout(120_000),
     });
     if (!response.ok) throw new Error(`downloadFile: HTTP ${response.status}`);
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  /** Switch Telegram to webhook delivery (used on a VPS behind HTTPS). */
+  setWebhook(url, { secretToken, maxConnections = 40 } = {}) {
+    return this.call('setWebhook', {
+      url,
+      ...(secretToken ? { secret_token: secretToken } : {}),
+      max_connections: maxConnections,
+      allowed_updates: ['message'],
+    });
+  }
+
+  deleteWebhook() {
+    return this.call('deleteWebhook', {});
+  }
+
+  getWebhookInfo() {
+    return this.call('getWebhookInfo', {});
   }
 }
 

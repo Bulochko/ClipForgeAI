@@ -2,12 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
 import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
-import { askAgent, describeLauncher } from './agent.mjs';
+import { askAgent, describeLauncher, agentAvailable } from './agent.mjs';
 import { chat as runChat, PROVIDERS, availableProviders } from './providers.mjs';
 import { generateImage } from './image.mjs';
 import { textToSpeech, speechToText } from './speech.mjs';
 import { makeSticker } from './sticker.mjs';
 import { ffmpegAvailable } from './ffmpeg.mjs';
+import { startWebhookServer } from './webhook.mjs';
 
 const config = loadConfig();
 const stateDir = join(config.root, 'data');
@@ -15,9 +16,12 @@ mkdirSync(stateDir, { recursive: true });
 const offsetFile = join(stateDir, 'offset.json');
 
 if (!config.botToken) die('TELEGRAM_BOT_TOKEN не задан. Впиши токен от @BotFather в .env.');
-if (!config.deepseekKey) die('DEEPSEEK_API_KEY не задан. Впиши ключ с platform.deepseek.com в .env.');
-// The headless agent inherits our environment, so expose the key to the child process.
-process.env.DEEPSEEK_API_KEY = config.deepseekKey;
+if (config.deepseekKey) process.env.DEEPSEEK_API_KEY = config.deepseekKey;
+
+const PROVIDER_KEY_ENVS = ['DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY'];
+if (!PROVIDER_KEY_ENVS.some((name) => process.env[name]) && !agentAvailable()) {
+  die('Не задан ни один ключ провайдера. Добавь GEMINI_API_KEY, GROQ_API_KEY или DEEPSEEK_API_KEY в .env.');
+}
 
 const tg = new Telegram({ token: config.botToken, apiBase: config.apiBase });
 const history = new Map(); // chatId -> [{ role, content }]
@@ -53,7 +57,19 @@ const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, re
   .then((me) => console.log(`Карточка бота: @${me?.username ?? '?'}`))
   .catch((error) => console.error(`[getMe] ${error.message}`));
 
-void poll();
+if (config.mode === 'webhook') {
+  if (!config.webhookUrl) die('MODE=webhook требует WEBHOOK_URL — публичный HTTPS-адрес эндпоинта.');
+  await startWebhookServer({
+    port: config.webhookPort,
+    secret: config.webhookSecret,
+    onUpdate: (update) => handleUpdate(update),
+  });
+  await tg.setWebhook(config.webhookUrl, { secretToken: config.webhookSecret });
+  console.log(`Режим webhook: порт ${config.webhookPort}, Telegram -> ${config.webhookUrl}`);
+} else {
+  await tg.deleteWebhook().catch(() => undefined);
+  void poll();
+}
 
 async function poll() {
   let failures = 0;
