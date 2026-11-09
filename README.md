@@ -99,12 +99,19 @@ npm test
 
 ## Развёртывание на VPS
 
+Репозиторий приватный. Для автоматического клонирования с VPS заранее добавь read-only
+Deploy key в GitHub: создай пользователя `lyra`, сгенерируй для него SSH-ключ,
+добавь публичную часть в Settings → Deploy keys репозитория и проверь доступ командой
+`sudo -u lyra git ls-remote git@github.com:Bulochko/Lyra-AI.git HEAD`.
+Закрытый ключ должен находиться в домашней папке пользователя `lyra`; не помещай его
+в репозиторий или `.env`.
+
 Два варианта, оба с автоперезапуском.
 
 **Docker (проще)**
 
 ```bash
-git clone https://github.com/Bulochko/Lyra-AI.git /opt/lyra-ai
+git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
 cd /opt/lyra-ai
 cp .env.example .env   # заполнить токен, ключи, WEBHOOK_URL, WEBHOOK_SECRET
 docker compose up -d --build
@@ -114,7 +121,7 @@ docker compose up -d --build
 
 ```bash
 sudo useradd -r -m -d /opt/lyra-ai lyra
-sudo -u lyra git clone https://github.com/Bulochko/Lyra-AI.git /opt/lyra-ai
+sudo -u lyra git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
 cd /opt/lyra-ai && cp .env.example .env   # заполнить
 sudo apt install -y nodejs ffmpeg
 sudo cp deploy/lyra-ai.service /etc/systemd/system/
