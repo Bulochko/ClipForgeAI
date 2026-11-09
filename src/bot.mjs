@@ -61,7 +61,9 @@ const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, re
 
 if (config.mode === 'webhook') {
   if (!config.webhookUrl) die('MODE=webhook требует WEBHOOK_URL — публичный HTTPS-адрес эндпоинта.');
-  if (!config.webhookSecret) die('MODE=webhook требует WEBHOOK_SECRET. Без секрета webhook не запускается.');
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(config.webhookSecret)) {
+    die('WEBHOOK_SECRET обязателен и должен содержать 1–256 символов: A–Z, a–z, 0–9, _ или -.');
+  }
   await startWebhookServer({
     port: config.webhookPort,
     secret: config.webhookSecret,
