@@ -35,7 +35,7 @@ Telegram  ──►  bot.mjs  ──►  providers.mjs  ──►  AI provider  
 | `GEMINI_API_KEY` | ключ Gemini для чата, распознавания и TTS |
 | `GROQ_API_KEY` | ключ Groq для чата и Whisper |
 | `OPENROUTER_API_KEY` | ключ OpenRouter для чата |
-| `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен для DeepSeek API и локального агента |
+| `DEEPSEEK_API_KEY` | ключ DeepSeek API; при наличии передаётся локальному агенту |
 | `POLLINATIONS_API_KEY` | секретный серверный ключ Pollinations (`sk_`) для изображений |
 | `TELEGRAM_PROXY` | необязательный прокси (`http://host:port`); включается через `NODE_USE_ENV_PROXY=1` |
 | `AGENT_WORKSPACE` | папка, в которой работает агент (по умолчанию корень репозитория) |
