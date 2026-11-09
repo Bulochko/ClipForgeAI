@@ -374,7 +374,11 @@ async function handleModelCommand(chatId, text) {
 
 function providerFor(chatId) {
   const chosen = providers.get(chatId) ?? config.defaultProvider;
-  return PROVIDERS[chosen] ? chosen : 'agent';
+  if (!PROVIDERS[chosen]) return 'agent';
+  if (chosen === 'agent' && !agentAvailable()) {
+    return availableProviders().find((item) => item.kind !== 'agent')?.name ?? 'agent';
+  }
+  return chosen;
 }
 
 /**
