@@ -131,14 +131,15 @@ sudo docker compose up -d --build
 **systemd без Docker**
 
 ```bash
-sudo useradd -r -m -d /opt/lyra-ai lyra
 sudo -u lyra git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
-cd /opt/lyra-ai && cp .env.example .env   # заполнить
-sudo apt install -y nodejs ffmpeg
-sudo cp deploy/lyra-ai.service /etc/systemd/system/
-sudo systemctl enable --now lyra-ai
+cd /opt/lyra-ai
+sudo -u lyra cp .env.example .env
+sudo nano .env
+sudo bash deploy/setup.sh
 journalctl -u lyra-ai -f
 ```
+
+Скрипт установит Node.js, ffmpeg, systemd-службу и выполнит проверку окружения.
 
 **Webhook и TLS**
 
