@@ -23,7 +23,7 @@ export function describeLauncher() {
   const cliJs = (process.env.DSH_CLI_JS ?? '').trim() || DEFAULT_CLI_JS;
   return existsSync(appExe) && existsSync(cliJs)
     ? appExe
-    : (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD;
+    : (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD || 'DeepSeek Harness CLI не найден';
 }
 
 /** The DSH agent only exists where the Desktop app is installed (the local PC). */
