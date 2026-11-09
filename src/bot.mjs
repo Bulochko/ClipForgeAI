@@ -134,7 +134,7 @@ async function handleUpdate(update) {
     return;
   }
 
-  const text = message?.text?.trim();
+  const text = (message?.text?.trim() ?? '').replace(/^\/([a-z0-9_]+)@\w+/i, '/$1');
   if (!text) return;
 
   if (text === '/start' || text === '/help') {
