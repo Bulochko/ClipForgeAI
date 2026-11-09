@@ -98,7 +98,7 @@ async function fetchTtsChunk(text, lang) {
   return buffer;
 }
 
-function splitForTts(text) {
+export function splitForTts(text) {
   const sentences = text.replace(/\s+/g, ' ').match(/[^.!?…]+[.!?…]?/g) ?? [text];
   const chunks = [];
   let current = '';

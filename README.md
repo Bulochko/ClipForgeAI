@@ -66,8 +66,15 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 
 Переключение в чате: `/model gemini`. По умолчанию — `DEFAULT_PROVIDER` из `.env`.
 
-## Требования
+## Тесты
 
+```bash
+node --test tests/format.test.mjs
+```
+
+Покрывают разбиение длинных ответов, нарезку текста для TTS и разбор конфигурации.
+
+## Требования
 - Node из DeepSeek Harness (ставится вместе с приложением) — `run.cmd` использует его сам.
 - `ffmpeg` — для голосовых, видеокружков и стикеров. Ставится через
   `winget install Gyan.FFmpeg`; модуль находит его и без обновления PATH.

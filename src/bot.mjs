@@ -159,13 +159,7 @@ async function handleUpdate(update) {
 
   try {
     const messages = [...(history.get(chatId) ?? []), { role: 'user', content: prompt }];
-    const answer = await runChat({
-      provider,
-      messages,
-      system: SYSTEM_PROMPT,
-      agentRunner: ({ prompt: agentPrompt }) =>
-        askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
-    });
+    const { answer, provider: used } = await askWithFallback(provider, messages);
 
     for (const chunk of splitMessage(answer)) {
       await tg.sendMessage(chatId, chunk);
@@ -173,7 +167,7 @@ async function handleUpdate(update) {
 
     const entry = [...messages, { role: 'assistant', content: truncate(answer, 800) }];
     history.set(chatId, entry.slice(-config.historyLimit * 2));
-    console.log(`[answer] chat=${chatId} chars=${answer.length}`);
+    console.log(`[answer] chat=${chatId} provider=${used} chars=${answer.length}`);
   } catch (error) {
     console.error(`[chat] ${error.message}`);
     await tg.sendMessage(chatId, `Не получилось: ${truncate(error.message, 500)}`);
@@ -292,13 +286,7 @@ async function handleAudioMessage(chatId, audio, message) {
 
     const provider = providerFor(chatId);
     const messages = [...(history.get(chatId) ?? []), { role: 'user', content: transcript }];
-    const answer = await runChat({
-      provider,
-      messages,
-      system: SYSTEM_PROMPT,
-      agentRunner: ({ prompt: agentPrompt }) =>
-        askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
-    });
+    const { answer } = await askWithFallback(provider, messages);
 
     for (const chunk of splitMessage(answer)) {
       await tg.sendMessage(chatId, chunk);
@@ -351,6 +339,36 @@ async function handleModelCommand(chatId, text) {
 function providerFor(chatId) {
   const chosen = providers.get(chatId) ?? config.defaultProvider;
   return PROVIDERS[chosen] ? chosen : 'agent';
+}
+
+/**
+ * Ask the selected provider; if it fails, try the other API providers in order.
+ * The local agent is never used as a silent fallback: it has different abilities.
+ */
+async function askWithFallback(provider, messages) {
+  const chain = [provider];
+  for (const item of availableProviders()) {
+    if (item.kind !== 'agent' && item.name !== provider) chain.push(item.name);
+  }
+
+  let lastError;
+  for (const name of chain) {
+    try {
+      const answer = await runChat({
+        provider: name,
+        messages,
+        system: SYSTEM_PROMPT,
+        agentRunner: ({ prompt: agentPrompt }) =>
+          askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
+      });
+      if (name !== provider) console.warn(`[fallback] ${provider} -> ${name}`);
+      return { answer, provider: name };
+    } catch (error) {
+      lastError = error;
+      console.warn(`[fail] provider=${name}: ${error.message}`);
+    }
+  }
+  throw lastError;
 }
 
 function helpText() {
