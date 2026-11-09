@@ -69,4 +69,8 @@ fi
 systemctl restart lyra-ai
 sleep 2
 systemctl --no-pager --full status lyra-ai || true
+
+echo "== проверка окружения =="
+sudo -u lyra bash -lc "cd '${APP_DIR}' && node src/doctor.mjs --deep" || true
+
 echo "Логи: journalctl -u lyra-ai -f"
