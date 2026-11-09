@@ -50,6 +50,11 @@ export function loadConfig() {
     webhookUrl: pick('WEBHOOK_URL'),
     webhookPort: Number(pick('WEBHOOK_PORT')) || 8443,
     webhookSecret: pick('WEBHOOK_SECRET'),
+    // Empty list means "answer everyone"; otherwise only these chat ids are served.
+    allowedChatIds: pick('ALLOWED_CHAT_IDS')
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value !== 0),
   };
 }
 

@@ -96,6 +96,11 @@ async function handleUpdate(update) {
   const chatId = message?.chat?.id;
   if (!chatId) return;
 
+  if (config.allowedChatIds.length > 0 && !config.allowedChatIds.includes(chatId)) {
+    console.log(`[deny] chat=${chatId} not in ALLOWED_CHAT_IDS`);
+    return;
+  }
+
   const audio = message.voice ?? message.video_note ?? message.audio;
   if (audio) {
     await handleAudioMessage(chatId, audio, message);
@@ -112,6 +117,10 @@ async function handleUpdate(update) {
   if (text === '/reset') {
     history.delete(chatId);
     await tg.sendMessage(chatId, 'Контекст очищен.');
+    return;
+  }
+  if (text === '/id') {
+    await tg.sendMessage(chatId, `chat_id: ${chatId}`);
     return;
   }
   if (text === '/model' || text.startsWith('/model ')) {

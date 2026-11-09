@@ -8,8 +8,11 @@ import { createServer } from 'node:http';
 export function startWebhookServer({ port, secret, onUpdate, path = '/telegram', host = '0.0.0.0' }) {
   const server = createServer(async (request, response) => {
     if (request.method === 'GET') {
-      response.writeHead(200, { 'content-type': 'text/plain' });
-      response.end('ok');
+      const isHealth = request.url === '/health';
+      response.writeHead(200, { 'content-type': isHealth ? 'application/json' : 'text/plain' });
+      response.end(
+        isHealth ? JSON.stringify({ ok: true, uptime: Math.round(process.uptime()) }) : 'ok',
+      );
       return;
     }
     if (request.method !== 'POST' || request.url !== path) {
