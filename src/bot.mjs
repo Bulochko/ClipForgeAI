@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig } from './config.mjs';
+import { loadConfig, isChatAllowed } from './config.mjs';
 import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
 import { askAgent, describeLauncher, agentAvailable } from './agent.mjs';
 import { chat as runChat, PROVIDERS, availableProviders } from './providers.mjs';
@@ -111,16 +111,12 @@ async function handleUpdate(update) {
   const chatId = message?.chat?.id;
   if (!chatId) return;
 
-  const incomingText = message.text?.trim() ?? '';
-  const bootstrapCommand =
-    config.allowedChatIds.length === 0 &&
-    !config.allowPublicChats &&
-    /^\/(start|help|id)(?:@\w+)?(?:\s|$)/i.test(incomingText);
-  const isDenied = config.allowedChatIds.length > 0
-    ? !config.allowedChatIds.includes(chatId)
-    : !config.allowPublicChats && !bootstrapCommand;
-
-  if (isDenied) {
+  if (!isChatAllowed({
+    chatId,
+    allowedChatIds: config.allowedChatIds,
+    allowPublicChats: config.allowPublicChats,
+    text: message.text ?? '',
+  })) {
     console.log(`[deny] chat=${chatId} is not authorized`);
     return;
   }
