@@ -67,7 +67,7 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 |---|---|---|
 | `agent` | не нужен | локальный агент с файлами и терминалом |
 | `gemini` | `GEMINI_API_KEY` | да, free tier |
-| `groq` | `GROQ_API_KEY` | да, free tier (+ Whisper) |
+| `groq` | `GROQ_API_KEY` | тарифы и квоты зависят от плана Groq (+ Whisper) |
 | `openrouter` | `OPENROUTER_API_KEY` | да, модели с суффиксом `:free` |
 | `deepseek` | `DEEPSEEK_API_KEY` | нет, но дёшево |
 
