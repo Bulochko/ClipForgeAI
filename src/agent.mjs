@@ -13,6 +13,25 @@ const DEFAULT_DSH_CMD = DEFAULT_APP_DIR
   ? join(DEFAULT_APP_DIR, 'resources', 'runtime', 'cli', 'bin', 'dsh.cmd')
   : '';
 
+const AGENT_ENV_KEYS = [
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+  'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+  'HOMEDRIVE', 'HOMEPATH', 'USERNAME', 'HOME',
+  'PROCESSOR_ARCHITECTURE', 'OS', 'NODE_ENV',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+  'DEEPSEEK_API_KEY',
+];
+
+/** Pass only the runtime variables the local agent needs, not Telegram or other provider secrets. */
+export function createAgentEnv(source = process.env, { electron = false } = {}) {
+  const env = {};
+  for (const name of AGENT_ENV_KEYS) {
+    if (source[name] !== undefined) env[name] = source[name];
+  }
+  if (electron) env.ELECTRON_RUN_AS_NODE = '1';
+  return env;
+}
+
 /**
  * The agent is launched through the Electron binary in Node mode and the Desktop
  * CLI entry point. Going through the .cmd shim breaks multi-line prompts, so the
@@ -44,12 +63,12 @@ function buildCommand(prompt) {
     return {
       file: appExe,
       args: ['--expose-internals', cliJs, 'headless', prompt],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: createAgentEnv(process.env, { electron: true }),
     };
   }
   // Fallback for non-standard installations that only ship the launcher script.
   const cli = (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD;
-  return { file: 'cmd.exe', args: ['/d', '/s', '/c', cli, 'headless', prompt], env: process.env };
+  return { file: 'cmd.exe', args: ['/d', '/s', '/c', cli, 'headless', prompt], env: createAgentEnv() };
 }
 
 /**
