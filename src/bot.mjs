@@ -62,7 +62,7 @@ if (config.mode === 'webhook') {
   await startWebhookServer({
     port: config.webhookPort,
     secret: config.webhookSecret,
-    onUpdate: (update) => handleUpdate(update),
+    onUpdate: (update) => safeHandle(update),
   });
   await tg.setWebhook(config.webhookUrl, { secretToken: config.webhookSecret });
   console.log(`Режим webhook: порт ${config.webhookPort}, Telegram -> ${config.webhookUrl}`);
@@ -80,7 +80,7 @@ async function poll() {
       for (const update of updates ?? []) {
         offset = update.update_id + 1;
         saveOffset(offset);
-        void handleUpdate(update);
+        safeHandle(update);
       }
     } catch (error) {
       failures += 1;
@@ -89,6 +89,16 @@ async function poll() {
       await sleep(Math.min(2000 * failures, 30_000));
     }
   }
+}
+
+/**
+ * Never let a single failed update take the process down: a send error for one
+ * chat must not stop the bot for everyone else.
+ */
+function safeHandle(update) {
+  handleUpdate(update).catch((error) => {
+    console.error(`[update] ${error?.message ?? error}`);
+  });
 }
 
 async function handleUpdate(update) {
