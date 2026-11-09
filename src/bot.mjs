@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, isChatAllowed } from './config.mjs';
 import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
@@ -18,6 +18,7 @@ if (!['polling', 'webhook'].includes(config.mode)) {
 const stateDir = join(config.root, 'data');
 mkdirSync(stateDir, { recursive: true });
 const offsetFile = join(stateDir, 'offset.json');
+const webhookQueueDir = join(stateDir, 'webhook-queue');
 
 if (!config.botToken) die('TELEGRAM_BOT_TOKEN не задан. Впиши токен от @BotFather в .env.');
 if (config.deepseekKey) process.env.DEEPSEEK_API_KEY = config.deepseekKey;
@@ -67,10 +68,12 @@ if (config.mode === 'webhook') {
   if (!/^[A-Za-z0-9_-]{1,256}$/.test(config.webhookSecret)) {
     die('WEBHOOK_SECRET обязателен и должен содержать 1–256 символов: A–Z, a–z, 0–9, _ или -.');
   }
+  mkdirSync(webhookQueueDir, { recursive: true });
+  void processWebhookQueue();
   await startWebhookServer({
     port: config.webhookPort,
     secret: config.webhookSecret,
-    onUpdate: (update) => safeHandle(update),
+    onUpdate: enqueueWebhookUpdate,
   });
   await tg.setWebhook(config.webhookUrl, { secretToken: config.webhookSecret });
   console.log(`Режим webhook: порт ${config.webhookPort}, Telegram -> ${config.webhookUrl}`);
@@ -115,6 +118,56 @@ async function safeHandle(update) {
   } catch (error) {
     console.error(`[update] ${error?.message ?? error}`);
     return false;
+  }
+}
+
+/** Persist webhook updates before returning HTTP 200 to Telegram. */
+function enqueueWebhookUpdate(update) {
+  const updateId = Number(update?.update_id);
+  if (!Number.isSafeInteger(updateId) || updateId < 0) {
+    throw new Error('Telegram update has no valid update_id.');
+  }
+
+  const filePath = join(webhookQueueDir, `${updateId}.json`);
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  writeFileSync(temporaryPath, JSON.stringify(update), 'utf8');
+  renameSync(temporaryPath, filePath);
+}
+
+/** Process the durable webhook queue sequentially; failed updates stay on disk. */
+async function processWebhookQueue() {
+  for (;;) {
+    let files;
+    try {
+      files = readdirSync(webhookQueueDir)
+        .filter((name) => /^\d+\.json$/.test(name))
+        .sort((a, b) => Number(a.slice(0, -5)) - Number(b.slice(0, -5)));
+    } catch (error) {
+      console.error(`[webhook-queue] ${error.message}`);
+      await sleep(1000);
+      continue;
+    }
+
+    if (files.length === 0) {
+      await sleep(500);
+      continue;
+    }
+
+    const filePath = join(webhookQueueDir, files[0]);
+    let update;
+    try {
+      update = JSON.parse(readFileSync(filePath, 'utf8'));
+    } catch (error) {
+      console.error(`[webhook-queue] removing unreadable update: ${error.message}`);
+      rmSync(filePath, { force: true });
+      continue;
+    }
+
+    if (await safeHandle(update)) {
+      rmSync(filePath, { force: true });
+    } else {
+      await sleep(1000);
+    }
   }
 }
 
