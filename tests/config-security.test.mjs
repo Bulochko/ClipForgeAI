@@ -21,10 +21,16 @@ test('allowlist permits only listed chat IDs', () => {
   assert.equal(isChatAllowed({ ...policy, chatId: 999, text: '/start' }), false);
 });
 
-test('public access requires an explicit opt-in when allowlist is empty', () => {
+test('public access requires an explicit opt-in and overrides an allowlist', () => {
   assert.equal(isChatAllowed({
     chatId: 999,
     allowedChatIds: [],
+    allowPublicChats: true,
+    text: 'hello',
+  }), true);
+  assert.equal(isChatAllowed({
+    chatId: 999,
+    allowedChatIds: [123],
     allowPublicChats: true,
     text: 'hello',
   }), true);
