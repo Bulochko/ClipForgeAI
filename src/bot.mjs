@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, isChatAllowed } from './config.mjs';
 import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
@@ -129,6 +129,7 @@ function enqueueWebhookUpdate(update) {
   }
 
   const filePath = join(webhookQueueDir, `${updateId}.json`);
+  if (existsSync(filePath)) return;
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
   writeFileSync(temporaryPath, JSON.stringify(update), 'utf8');
   renameSync(temporaryPath, filePath);
