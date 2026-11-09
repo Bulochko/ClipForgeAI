@@ -148,15 +148,16 @@ function wrap(text, limit) {
  */
 export async function speechToText(input, { inputExt = 'ogg', lang = 'ru' } = {}) {
   const geminiKey = (process.env.GEMINI_API_KEY ?? '').trim();
-  if (geminiKey) return geminiTranscribe(input, inputExt, geminiKey);
+  const groqKey = (process.env.GROQ_API_KEY ?? '').trim();
+  const backend = (process.env.STT_BACKEND ?? '').trim().toLowerCase();
 
-  const key = (process.env.GROQ_API_KEY ?? '').trim();
-  if (!key) {
-    throw new Error(
-      'Распознавание речи не настроено: нужен GEMINI_API_KEY или GROQ_API_KEY в .env.',
-    );
-  }
-  return groqTranscribe(input, inputExt, lang, key);
+  if (backend === 'groq' && groqKey) return groqTranscribe(input, inputExt, lang, groqKey);
+  if (geminiKey) return geminiTranscribe(input, inputExt, geminiKey);
+  if (groqKey) return groqTranscribe(input, inputExt, lang, groqKey);
+
+  throw new Error(
+    'Распознавание речи не настроено: нужен GEMINI_API_KEY или GROQ_API_KEY в .env.',
+  );
 }
 
 const MIME_BY_EXT = {
