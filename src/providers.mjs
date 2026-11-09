@@ -23,7 +23,7 @@ export const PROVIDERS = {
   },
   groq: {
     kind: 'openai',
-    label: 'Groq / GPT-OSS (бесплатный тир)',
+    label: 'Groq / GPT-OSS 120B',
     baseUrl: 'https://api.groq.com/openai/v1',
     // llama-3.3 is retired on Groq; gpt-oss-120b is the current free flagship.
     model: 'openai/gpt-oss-120b',
