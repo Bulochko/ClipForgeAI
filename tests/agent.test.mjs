@@ -29,3 +29,13 @@ test('Electron launcher receives its required runtime flag', () => {
   const env = createAgentEnv({ PATH: '/usr/bin' }, { electron: true });
   assert.equal(env.ELECTRON_RUN_AS_NODE, '1');
 });
+
+test('agent does not inherit proxy credentials', () => {
+  const env = createAgentEnv({
+    HTTP_PROXY: 'http://proxy.example:8080',
+    HTTPS_PROXY: 'http://user:password@proxy.example:8080',
+  });
+
+  assert.equal(env.HTTP_PROXY, 'http://proxy.example:8080');
+  assert.equal('HTTPS_PROXY' in env, false);
+});
