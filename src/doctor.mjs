@@ -59,6 +59,13 @@ if (config.botToken) {
   }
 }
 
+// Optional image generation key
+record(
+  'Pollinations API key',
+  config.pollinationsKey ? true : null,
+  config.pollinationsKey ? 'задан' : 'не задан — команда /img будет недоступна',
+);
+
 // 3. ffmpeg for voice and stickers
 record('ffmpeg', await ffmpegAvailable(), 'нужен для голоса, видеокружков и стикеров');
 
