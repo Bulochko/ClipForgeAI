@@ -95,8 +95,12 @@ async function poll() {
           await sleep(1000);
           break;
         }
-        offset = update.update_id + 1;
-        saveOffset(offset);
+        const nextOffset = update.update_id + 1;
+        if (!saveOffset(nextOffset)) {
+          await sleep(1000);
+          break;
+        }
+        offset = nextOffset;
       }
     } catch (error) {
       failures += 1;
@@ -497,10 +501,15 @@ function loadOffset() {
 }
 
 function saveOffset(value) {
+  const temporaryPath = `${offsetFile}.${process.pid}.tmp`;
   try {
-    writeFileSync(offsetFile, JSON.stringify({ offset: value }), 'utf8');
+    writeFileSync(temporaryPath, JSON.stringify({ offset: value }), 'utf8');
+    renameSync(temporaryPath, offsetFile);
+    return true;
   } catch (error) {
+    rmSync(temporaryPath, { force: true });
     console.error(`[state] ${error.message}`);
+    return false;
   }
 }
 
