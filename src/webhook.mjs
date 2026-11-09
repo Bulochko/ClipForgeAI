@@ -52,13 +52,17 @@ export function startWebhookServer({ port, secret, onUpdate, path = '/telegram',
       return;
     }
 
-    // Acknowledge quickly; the persistent Node process continues handling the update.
-    response.writeHead(200, { 'content-type': 'text/plain' });
-    response.end('ok');
-
-    Promise.resolve()
-      .then(() => onUpdate(update))
-      .catch((error) => console.error(`[webhook] ${error?.message ?? error}`));
+    // The bot callback only writes the update to its durable local queue.
+    // Do not acknowledge Telegram until that write has completed successfully.
+    try {
+      await onUpdate(update);
+      response.writeHead(200, { 'content-type': 'text/plain' });
+      response.end('ok');
+    } catch (error) {
+      console.error(`[webhook] ${error?.message ?? error}`);
+      response.writeHead(500, { 'content-type': 'text/plain' });
+      response.end('queue failed');
+    }
   });
 
   return new Promise((resolve, reject) => {
