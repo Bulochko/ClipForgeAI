@@ -63,6 +63,7 @@ export function loadConfig() {
       .split(',')
       .map((value) => Number(value.trim()))
       .filter((value) => Number.isFinite(value) && value !== 0),
+    rateLimitPerMin: Number(pick('RATE_LIMIT_PER_MIN')) || 12,
   };
 }
 

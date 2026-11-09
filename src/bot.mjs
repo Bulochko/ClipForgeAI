@@ -9,6 +9,7 @@ import { textToSpeech, speechToText } from './speech.mjs';
 import { makeSticker } from './sticker.mjs';
 import { ffmpegAvailable } from './ffmpeg.mjs';
 import { startWebhookServer } from './webhook.mjs';
+import { createLimiter } from './ratelimit.mjs';
 
 const config = loadConfig();
 const stateDir = join(config.root, 'data');
@@ -27,6 +28,7 @@ const tg = new Telegram({ token: config.botToken, apiBase: config.apiBase });
 const history = new Map(); // chatId -> [{ role, content }]
 const providers = new Map(); // chatId -> provider name
 const busy = new Map(); // chatId -> true while a reply is being produced
+const limiter = createLimiter({ limit: config.rateLimitPerMin, windowMs: 60_000 });
 let offset = loadOffset();
 
 const SYSTEM_PROMPT =
@@ -108,6 +110,13 @@ async function handleUpdate(update) {
 
   if (config.allowedChatIds.length > 0 && !config.allowedChatIds.includes(chatId)) {
     console.log(`[deny] chat=${chatId} not in ALLOWED_CHAT_IDS`);
+    return;
+  }
+
+  if (!limiter.allow(chatId)) {
+    const wait = limiter.retryAfter(chatId);
+    console.log(`[limit] chat=${chatId} retry_after=${wait}s`);
+    await tg.sendMessage(chatId, `Слишком часто. Подожди ${wait} с и повтори.`);
     return;
   }
 
