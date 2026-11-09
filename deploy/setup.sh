@@ -62,6 +62,9 @@ if [[ ! -f "${APP_DIR}/.env" ]]; then
   exit 0
 fi
 
+chown lyra:lyra "${APP_DIR}/.env"
+chmod 600 "${APP_DIR}/.env"
+
 echo "== systemd =="
 install -m 644 "${APP_DIR}/deploy/lyra-ai.service" /etc/systemd/system/lyra-ai.service
 systemctl daemon-reload
