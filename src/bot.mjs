@@ -83,9 +83,14 @@ async function poll() {
       const updates = await tg.getUpdates(offset, 50);
       failures = 0;
       for (const update of updates ?? []) {
+        const processed = await safeHandle(update);
+        if (!processed) {
+          // Keep the same offset so Telegram redelivers this update on the next poll.
+          await sleep(1000);
+          break;
+        }
         offset = update.update_id + 1;
         saveOffset(offset);
-        safeHandle(update);
       }
     } catch (error) {
       failures += 1;
@@ -100,10 +105,14 @@ async function poll() {
  * Never let a single failed update take the process down: a send error for one
  * chat must not stop the bot for everyone else.
  */
-function safeHandle(update) {
-  handleUpdate(update).catch((error) => {
+async function safeHandle(update) {
+  try {
+    await handleUpdate(update);
+    return true;
+  } catch (error) {
     console.error(`[update] ${error?.message ?? error}`);
-  });
+    return false;
+  }
 }
 
 async function handleUpdate(update) {
