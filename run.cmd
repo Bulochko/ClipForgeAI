@@ -3,7 +3,6 @@ setlocal EnableExtensions
 rem Launch Lyra AI with the Node runtime bundled inside DeepSeek Harness.
 
 set "APP_DIR=%LOCALAPPDATA%\Programs\DeepSeek Harness"
-if not exist "%APP_DIR%\DeepSeek Harness.exe" set "APP_DIR=C:\Users\Korobka\AppData\Local\Programs\DeepSeek Harness"
 if defined DSH_APP_DIR set "APP_DIR=%DSH_APP_DIR%"
 
 rem Keep the launcher and the agent module pointed at the same installation.
