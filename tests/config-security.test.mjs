@@ -14,7 +14,7 @@ test('empty allowlist denies normal messages but permits setup commands', () => 
 });
 
 test('allowlist permits only listed chat IDs', () => {
-  const policy = { allowedChatIds: [123, -456], allowPublicChats: true };
+  const policy = { allowedChatIds: [123, -456], allowPublicChats: false };
 
   assert.equal(isChatAllowed({ ...policy, chatId: 123, text: 'hello' }), true);
   assert.equal(isChatAllowed({ ...policy, chatId: -456, text: 'hello' }), true);
