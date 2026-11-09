@@ -88,6 +88,6 @@ sleep 2
 systemctl --no-pager --full status lyra-ai || true
 
 echo "== проверка окружения =="
-runuser -u lyra -- bash -lc "cd '${APP_DIR}' && node src/doctor.mjs --deep" || true
+runuser -u lyra -- bash -lc "cd '${APP_DIR}' && node src/doctor.mjs" || true
 
 echo "Логи: journalctl -u lyra-ai -f"
