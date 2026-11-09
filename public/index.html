@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lyra AI — Telegram-ассистент</title>
-    <meta name="description" content="Lyra AI — Telegram-бот с бесплатными языковыми моделями, картинками, голосом и стикерами." />
+    <meta name="description" content="Lyra AI — Telegram-ассистент с подключаемыми AI-моделями, голосом и генерацией изображений." />
     <style>
       :root {
         --bg: #0b0f16;
@@ -66,13 +66,13 @@
   </head>
   <body>
     <main>
-      <div class="badge"><span class="dot"></span> работает на бесплатных тирах моделей</div>
+      <div class="badge"><span class="dot"></span> подключаемые AI-сервисы</div>
 
       <h1>Lyra <span>AI</span></h1>
       <p class="lead">
-        Telegram-ассистент: отвечает текстом, рисует картинки и стикеры, слушает голосовые
-        и видеокружки, озвучивает ответы. Никаких платных подписок — только бесплатные
-        лимиты Gemini, Groq и Pollinations.
+        Telegram-ассистент: отвечает текстом, распознаёт голосовые и видеокружки,
+        озвучивает ответы, генерирует картинки и стикеры. Возможности и стоимость
+        зависят от подключённых провайдеров, их тарифов и доступных квот.
       </p>
 
       <a class="cta" href="https://t.me/LigeiaAI">Открыть @LigeiaAI</a>
@@ -81,26 +81,26 @@
       <div class="grid">
         <div class="card">
           <h3>Диалог</h3>
-          <p>Текст через Gemini или Groq, с сохранением контекста и переключением модели.</p>
+          <p>Gemini, Groq, OpenRouter и DeepSeek. Модель можно переключать командой /model.</p>
         </div>
         <div class="card">
           <h3>Голос</h3>
-          <p>Распознаёт голосовые и видеокружки, отвечает текстом и голосом.</p>
+          <p>Распознавание через Gemini или Groq; голосовой ответ через Gemini TTS или резервный сервис.</p>
         </div>
         <div class="card">
           <h3>Медиа</h3>
-          <p>Генерирует картинки и стикеры 512×512 без ключей и квот.</p>
+          <p>Картинки и стикеры через Pollinations. Для генерации нужен API-ключ и доступная квота.</p>
         </div>
         <div class="card">
           <h3>Агент</h3>
-          <p>На локальной машине получает доступ к файлам и терминалу.</p>
+          <p>Доступ к файлам и терминалу возможен только при запуске на ПК с установленным DeepSeek Harness.</p>
         </div>
       </div>
 
       <h2>Команды</h2>
       <table>
-        <tr><td>/img &lt;описание&gt;</td><td>сгенерировать картинку</td></tr>
-        <tr><td>/sticker &lt;описание&gt;</td><td>сгенерировать стикер</td></tr>
+        <tr><td>/img &lt;описание&gt;</td><td>сгенерировать картинку (нужен ключ Pollinations)</td></tr>
+        <tr><td>/sticker &lt;описание&gt;</td><td>сгенерировать стикер (нужен ключ Pollinations)</td></tr>
         <tr><td>/voice &lt;текст&gt;</td><td>озвучить текст</td></tr>
         <tr><td>/model</td><td>список моделей и переключение</td></tr>
         <tr><td>/reset</td><td>очистить контекст диалога</td></tr>
