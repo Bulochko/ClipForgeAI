@@ -26,6 +26,7 @@ console.log('Lyra AI doctor');
 console.log(`режим: ${config.mode}, провайдер по умолчанию: ${config.defaultProvider}\n`);
 
 // 1. Configuration
+record('режим доставки', ['polling', 'webhook'].includes(config.mode), config.mode);
 record('токен бота задан', Boolean(config.botToken), config.botToken ? 'скрыт' : 'TELEGRAM_BOT_TOKEN пуст');
 
 const providers = availableProviders();
@@ -96,11 +97,15 @@ if (deep) {
     }
   }
 
-  try {
-    const { buffer } = await generateImage({ prompt: 'тестовая картинка', width: 256, height: 256 });
-    record('генерация картинок', true, `${Math.round(buffer.length / 1024)} КБ`);
-  } catch (error) {
-    record('генерация картинок', false, error.message);
+  if (!config.pollinationsKey) {
+    record('генерация картинок', null, 'добавь POLLINATIONS_API_KEY для проверки');
+  } else {
+    try {
+      const { buffer } = await generateImage({ prompt: 'тестовая картинка', width: 256, height: 256 });
+      record('генерация картинок', true, `${Math.round(buffer.length / 1024)} КБ`);
+    } catch (error) {
+      record('генерация картинок', false, error.message);
+    }
   }
 } else {
   record('живые проверки провайдеров', null, 'запусти с --deep');
