@@ -132,7 +132,7 @@ sudo systemctl reload caddy
 ```
 
 В `.env`: `MODE=webhook`, `WEBHOOK_URL=https://bot.example.com/telegram`,
-`WEBHOOK_SECRET=<случайная строка из букв, цифр, _ и ->`. Секрет обязателен.
+`WEBHOOK_SECRET=<случайная строка из латинских букв, цифр, подчёркивания и дефиса>`. Секрет обязателен.
 Без домена оставляй `MODE=polling` — polling
 на сервере работает так же надёжно и не требует сертификата.
 
