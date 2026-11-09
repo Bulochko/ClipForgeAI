@@ -27,7 +27,8 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 | Переменная | Назначение |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | токен бота, обязателен |
-| `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен |
+| `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен для DeepSeek API |
+| `POLLINATIONS_API_KEY` | ключ Pollinations для генерации изображений |
 | `TELEGRAM_PROXY` | необязательный прокси (`http://host:port`); включается через `NODE_USE_ENV_PROXY=1` |
 | `AGENT_WORKSPACE` | папка, в которой работает агент (по умолчанию корень репозитория) |
 | `AGENT_TIMEOUT_MS` | таймаут одного ответа, по умолчанию 180000 |
@@ -36,7 +37,7 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 ## Команды бота
 
 - обычный текст — вопрос выбранной модели;
-- `/img <описание>` — генерация картинки (Pollinations, без ключа);
+- `/img <описание>` — генерация картинки через Pollinations (нужен `POLLINATIONS_API_KEY`);
 - `/sticker <описание>` — генерация стикера 512×512 WebP;
 - `/voice <текст>` — озвучка текста (Gemini TTS, запасной — Google Translate);
 - голосовое сообщение, видеокружок или аудио — распознаётся через Gemini
