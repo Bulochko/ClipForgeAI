@@ -19,9 +19,9 @@ apt-get update -y
 apt-get install -y git ffmpeg curl ca-certificates gpg openssh-client
 
 NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/' || echo 0)"
-if [[ "${NODE_MAJOR:-0}" -lt 20 ]]; then
-  echo "== node 22 из NodeSource =="
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+if [[ "${NODE_MAJOR:-0}" -lt 24 ]]; then
+  echo "== node 24 из NodeSource =="
+  curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
   apt-get install -y nodejs
 fi
 
