@@ -43,8 +43,8 @@ export function loadEnvOnce() {
  * setup commands are accepted unless public access is explicitly enabled.
  */
 export function isChatAllowed({ chatId, allowedChatIds = [], allowPublicChats = false, text = '' }) {
-  if (allowedChatIds.length > 0) return allowedChatIds.includes(Number(chatId));
   if (allowPublicChats) return true;
+  if (allowedChatIds.length > 0) return allowedChatIds.includes(Number(chatId));
   return /^\/(start|help|id)(?:@\w+)?(?:\s|$)/i.test(String(text).trim());
 }
 
