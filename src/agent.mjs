@@ -21,7 +21,12 @@ export function describeLauncher() {
 /** The DSH agent only exists where the Desktop app is installed (the local PC). */
 export function agentAvailable() {
   const appExe = (process.env.DSH_APP_EXE ?? '').trim() || DEFAULT_APP_EXE;
-  return existsSync(appExe);
+  const cliJs = (process.env.DSH_CLI_JS ?? '').trim() || DEFAULT_CLI_JS;
+  const cli = (process.env.DSH_CLI ?? '').trim();
+
+  // The Electron app path alone is not enough: the headless CLI entry point
+  // must exist too. A custom launcher is accepted as an alternative.
+  return (existsSync(appExe) && existsSync(cliJs)) || Boolean(cli && existsSync(cli));
 }
 
 function buildCommand(prompt) {
