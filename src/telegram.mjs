@@ -141,7 +141,7 @@ export class Telegram {
   }
 
   /** Switch Telegram to webhook delivery (used on a VPS behind HTTPS). */
-  setWebhook(url, { secretToken, maxConnections = 40 } = {}) {
+  setWebhook(url, { secretToken, maxConnections = 1 } = {}) {
     return this.call('setWebhook', {
       url,
       ...(secretToken ? { secret_token: secretToken } : {}),
