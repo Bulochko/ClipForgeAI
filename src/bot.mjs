@@ -61,6 +61,7 @@ const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, re
 
 if (config.mode === 'webhook') {
   if (!config.webhookUrl) die('MODE=webhook требует WEBHOOK_URL — публичный HTTPS-адрес эндпоинта.');
+  if (!config.webhookSecret) die('MODE=webhook требует WEBHOOK_SECRET. Без секрета webhook не запускается.');
   await startWebhookServer({
     port: config.webhookPort,
     secret: config.webhookSecret,
@@ -108,8 +109,17 @@ async function handleUpdate(update) {
   const chatId = message?.chat?.id;
   if (!chatId) return;
 
-  if (config.allowedChatIds.length > 0 && !config.allowedChatIds.includes(chatId)) {
-    console.log(`[deny] chat=${chatId} not in ALLOWED_CHAT_IDS`);
+  const incomingText = message.text?.trim() ?? '';
+  const bootstrapCommand =
+    config.allowedChatIds.length === 0 &&
+    !config.allowPublicChats &&
+    /^\/(start|help|id)(?:@\w+)?(?:\s|$)/i.test(incomingText);
+  const isDenied = config.allowedChatIds.length > 0
+    ? !config.allowedChatIds.includes(chatId)
+    : !config.allowPublicChats && !bootstrapCommand;
+
+  if (isDenied) {
+    console.log(`[deny] chat=${chatId} is not authorized`);
     return;
   }
 
@@ -377,7 +387,7 @@ async function askWithFallback(provider, messages) {
         provider: name,
         messages,
         system: SYSTEM_PROMPT,
-        agentRunner: ({ prompt: agentPrompt }) =>
+        agentRunner: (agentPrompt) =>
           askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
       });
       if (name !== provider) console.warn(`[fallback] ${provider} -> ${name}`);
