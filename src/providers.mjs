@@ -39,8 +39,8 @@ export const PROVIDERS = {
   deepseek: {
     kind: 'openai',
     label: 'DeepSeek API (платный, дешёвый)',
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
     keyEnv: 'DEEPSEEK_API_KEY',
   },
 };
