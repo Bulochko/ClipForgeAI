@@ -78,7 +78,7 @@ export function loadConfig() {
     allowPublicChats: pick('ALLOW_PUBLIC_CHATS').toLowerCase() === 'true',
     rateLimitPerMin: rateLimitRaw === ''
       ? 12
-      : Number.isFinite(rateLimitNumber) ? Math.max(0, Math.floor(rateLimitNumber)) : 12,
+      : Number.isFinite(rateLimitNumber) && rateLimitNumber >= 0 ? Math.floor(rateLimitNumber) : 12,
   };
 }
 
