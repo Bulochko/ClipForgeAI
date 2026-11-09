@@ -3,6 +3,10 @@
  * All of them are optional — a provider is usable only when its key is present.
  */
 import { agentAvailable } from './agent.mjs';
+import { loadEnvOnce } from './config.mjs';
+
+// Providers are usable standalone (scripts, tests), so make sure .env is loaded.
+loadEnvOnce();
 
 export const PROVIDERS = {
   agent: {
@@ -13,7 +17,8 @@ export const PROVIDERS = {
   gemini: {
     kind: 'gemini',
     label: 'Google Gemini (бесплатный тир)',
-    model: 'gemini-2.5-flash',
+    // Lite model answers in ~2s; the full flash aliases currently hang or return 503.
+    model: 'gemini-3.5-flash-lite',
     keyEnv: 'GEMINI_API_KEY',
   },
   groq: {

@@ -1,4 +1,7 @@
 import { toVoiceOpus, toWav } from './ffmpeg.mjs';
+import { loadEnvOnce } from './config.mjs';
+
+loadEnvOnce();
 
 const TTS_ENDPOINT = 'https://translate.google.com/translate_tts';
 const TTS_LIMIT = 180;
@@ -84,15 +87,74 @@ function wrap(text, limit) {
 }
 
 /**
- * Speech recognition through Groq's free Whisper tier.
- * Accepts any Telegram audio/video payload; converts it to 16 kHz mono WAV first.
+ * Speech recognition.
+ * Prefers Gemini's transcription model (free tier, no extra key), falls back to
+ * Groq Whisper when only GROQ_API_KEY is configured.
  */
 export async function speechToText(input, { inputExt = 'ogg', lang = 'ru' } = {}) {
+  const geminiKey = (process.env.GEMINI_API_KEY ?? '').trim();
+  if (geminiKey) return geminiTranscribe(input, inputExt, geminiKey);
+
   const key = (process.env.GROQ_API_KEY ?? '').trim();
   if (!key) {
-    throw new Error('Распознавание речи не настроено: добавь GROQ_API_KEY в .env (бесплатно на console.groq.com).');
+    throw new Error(
+      'Распознавание речи не настроено: нужен GEMINI_API_KEY или GROQ_API_KEY в .env.',
+    );
+  }
+  return groqTranscribe(input, inputExt, lang, key);
+}
+
+const MIME_BY_EXT = {
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/ogg',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  mp4: 'video/mp4',
+  webm: 'audio/webm',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+};
+
+async function geminiTranscribe(input, inputExt, key) {
+  const mime = MIME_BY_EXT[String(inputExt).toLowerCase()] ?? 'audio/ogg';
+  const model = (process.env.GEMINI_STT_MODEL ?? '').trim() || 'gemini-3.5-transcribe';
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inline_data: { mime_type: mime, data: input.toString('base64') } },
+              { text: 'Расшифруй аудио дословно на языке записи, без комментариев и пояснений.' },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(`Gemini STT: HTTP ${response.status} ${payload?.error?.message ?? ''}`.trim());
   }
 
+  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts
+    .map((part) => part.audioTranscription?.text ?? part.text ?? '')
+    .join(' ')
+    .trim();
+  if (!text) throw new Error('Речь не распознана — возможно, запись пустая.');
+  return text;
+}
+
+async function groqTranscribe(input, inputExt, lang, key) {
   const wav = await toWav(input, inputExt);
   const form = new FormData();
   form.set('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');

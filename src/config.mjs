@@ -26,13 +26,21 @@ function readEnvFile(path) {
   return out;
 }
 
-export function loadConfig() {
+let envLoaded = false;
+
+/** Load .env into process.env exactly once; safe to call from any module. */
+export function loadEnvOnce() {
+  if (envLoaded) return;
   const fileEnv = readEnvFile(join(ROOT, '.env'));
-  // Expose every .env entry to process.env so provider modules see the same keys.
   for (const [key, value] of Object.entries(fileEnv)) {
     if (!process.env[key]) process.env[key] = value;
   }
-  const pick = (name) => (process.env[name] ?? fileEnv[name] ?? '').trim();
+  envLoaded = true;
+}
+
+export function loadConfig() {
+  loadEnvOnce();
+  const pick = (name) => (process.env[name] ?? '').trim();
 
   return {
     root: ROOT,
