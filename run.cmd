@@ -2,6 +2,11 @@
 setlocal EnableExtensions
 rem Launch Lyra AI with the Node runtime bundled inside DeepSeek Harness.
 
+if not defined DSH_APP_DIR (
+  for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /c:"DSH_APP_DIR=" "%~dp0.env" 2^>nul`) do set "DSH_APP_DIR=%%B"
+)
+if defined DSH_APP_DIR set "DSH_APP_DIR=%DSH_APP_DIR:"=%"
+
 set "APP_DIR=%LOCALAPPDATA%\Programs\DeepSeek Harness"
 if defined DSH_APP_DIR set "APP_DIR=%DSH_APP_DIR%"
 if not defined DSH_APP_DIR set "DSH_APP_DIR=%APP_DIR%"
