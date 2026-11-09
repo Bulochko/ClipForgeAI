@@ -28,6 +28,10 @@ function readEnvFile(path) {
 
 export function loadConfig() {
   const fileEnv = readEnvFile(join(ROOT, '.env'));
+  // Expose every .env entry to process.env so provider modules see the same keys.
+  for (const [key, value] of Object.entries(fileEnv)) {
+    if (!process.env[key]) process.env[key] = value;
+  }
   const pick = (name) => (process.env[name] ?? fileEnv[name] ?? '').trim();
 
   return {
@@ -40,6 +44,8 @@ export function loadConfig() {
     workspace: pick('AGENT_WORKSPACE') || ROOT,
     agentTimeoutMs: Number(pick('AGENT_TIMEOUT_MS')) || 180_000,
     historyLimit: Number(pick('HISTORY_LIMIT')) || 8,
+    defaultProvider: pick('DEFAULT_PROVIDER') || 'agent',
+    imageModel: pick('IMAGE_MODEL') || 'flux',
   };
 }
 

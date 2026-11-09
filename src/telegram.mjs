@@ -73,6 +73,40 @@ export class Telegram {
   sendChatAction(chatId, action = 'typing') {
     return this.call('sendChatAction', { chat_id: chatId, action }).catch(() => undefined);
   }
+
+  /** Upload a generated picture as a photo message. */
+  async sendPhoto(chatId, { buffer, filename = 'image.jpg', contentType = 'image/jpeg', caption }) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    if (caption) form.set('caption', truncate(caption, 1000));
+    form.set('photo', new Blob([buffer], { type: contentType }), filename);
+
+    const response = await fetch(`${this.apiBase}/bot${this.token}/sendPhoto`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(`sendPhoto: HTTP ${response.status} ${payload?.description ?? ''}`.trim());
+    }
+    return payload.result;
+  }
+
+  /** Resolve a Telegram file_id to a temporary download path. */
+  async getFile(fileId) {
+    const result = await this.call('getFile', { file_id: fileId });
+    return result?.file_path;
+  }
+
+  /** Download a file by its Telegram path into a Buffer. */
+  async downloadFile(filePath) {
+    const response = await fetch(`${this.apiBase}/file/bot${this.token}/${filePath}`, {
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) throw new Error(`downloadFile: HTTP ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }
 }
 
 export function sleep(ms) {

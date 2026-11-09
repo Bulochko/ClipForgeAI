@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
 import { Telegram, sleep, splitMessage, truncate } from './telegram.mjs';
 import { askAgent, describeLauncher } from './agent.mjs';
+import { chat as runChat, PROVIDERS, availableProviders } from './providers.mjs';
+import { generateImage } from './image.mjs';
 
 const config = loadConfig();
 const stateDir = join(config.root, 'data');
@@ -15,9 +17,14 @@ if (!config.deepseekKey) die('DEEPSEEK_API_KEY не задан. Впиши кл�
 process.env.DEEPSEEK_API_KEY = config.deepseekKey;
 
 const tg = new Telegram({ token: config.botToken, apiBase: config.apiBase });
-const history = new Map(); // chatId -> [{ role: 'user' | 'assistant', text }]
-const busy = new Map(); // chatId -> true while an answer is being produced
+const history = new Map(); // chatId -> [{ role, content }]
+const providers = new Map(); // chatId -> provider name
+const busy = new Map(); // chatId -> true while a reply is being produced
 let offset = loadOffset();
+
+const SYSTEM_PROMPT =
+  'Ты Lyra — дружелюбный ассистент в Telegram. Отвечай по-русски, коротко и по делу, ' +
+  'без лишних вступлений. Если просят код — давай рабочий код.';
 
 if (config.proxy) {
   console.warn(
@@ -26,9 +33,14 @@ if (config.proxy) {
   );
 }
 
-console.log(`Lyra AI bot запущен. dsh: ${describeLauncher()}`);
+console.log(`Lyra AI bot запущен. Агент: ${describeLauncher()}`);
 console.log(`Рабочая папка агента: ${config.workspace}`);
-// Non-blocking identity check: a blocked or slow network must not delay polling.
+console.log(
+  `Доступные провайдеры: ${availableProviders()
+    .map((item) => item.name)
+    .join(', ')} (по умолчанию: ${config.defaultProvider})`,
+);
+
 const probe = new Telegram({ token: config.botToken, apiBase: config.apiBase, requestTimeoutMs: 15_000 });
 probe
   .call('getMe', {}, { retries: 0 })
@@ -52,7 +64,6 @@ async function poll() {
       failures += 1;
       console.error(`[poll] ${error.message}`);
       if (/401/.test(error.message)) process.exit(1);
-      // Back off: Telegram may be unreachable (blocked network) — keep trying quietly.
       await sleep(Math.min(2000 * failures, 30_000));
     }
   }
@@ -65,12 +76,20 @@ async function handleUpdate(update) {
   if (!chatId || !text) return;
 
   if (text === '/start' || text === '/help') {
-    await tg.sendMessage(chatId, HELP_TEXT);
+    await tg.sendMessage(chatId, helpText());
     return;
   }
   if (text === '/reset') {
     history.delete(chatId);
     await tg.sendMessage(chatId, 'Контекст очищен.');
+    return;
+  }
+  if (text === '/model' || text.startsWith('/model ')) {
+    await handleModelCommand(chatId, text);
+    return;
+  }
+  if (text.startsWith('/img') || text.startsWith('/image')) {
+    await handleImageCommand(chatId, text.replace(/^\/(img|image)\s*/i, '').trim());
     return;
   }
 
@@ -86,27 +105,30 @@ async function handleUpdate(update) {
   }
 
   busy.set(chatId, true);
-  console.log(`[msg] chat=${chatId} chars=${prompt.length}`);
+  const provider = providerFor(chatId);
+  console.log(`[msg] chat=${chatId} provider=${provider} chars=${prompt.length}`);
   const typing = setInterval(() => void tg.sendChatAction(chatId), 4500);
   await tg.sendChatAction(chatId);
 
   try {
-    const { text: answer } = await askAgent({
-      prompt: buildPrompt(chatId, prompt),
-      workspace: config.workspace,
-      timeoutMs: config.agentTimeoutMs,
+    const messages = [...(history.get(chatId) ?? []), { role: 'user', content: prompt }];
+    const answer = await runChat({
+      provider,
+      messages,
+      system: SYSTEM_PROMPT,
+      agentRunner: ({ prompt: agentPrompt }) =>
+        askAgent({ prompt: agentPrompt, workspace: config.workspace, timeoutMs: config.agentTimeoutMs }),
     });
-    console.log(`[answer] chat=${chatId} chars=${answer.length}`);
 
     for (const chunk of splitMessage(answer)) {
       await tg.sendMessage(chatId, chunk);
     }
 
-    const entry = history.get(chatId) ?? [];
-    entry.push({ role: 'user', text: prompt }, { role: 'assistant', text: truncate(answer, 600) });
+    const entry = [...messages, { role: 'assistant', content: truncate(answer, 800) }];
     history.set(chatId, entry.slice(-config.historyLimit * 2));
+    console.log(`[answer] chat=${chatId} chars=${answer.length}`);
   } catch (error) {
-    console.error(`[agent] ${error.message}`);
+    console.error(`[chat] ${error.message}`);
     await tg.sendMessage(chatId, `Не получилось: ${truncate(error.message, 500)}`);
   } finally {
     clearInterval(typing);
@@ -114,16 +136,86 @@ async function handleUpdate(update) {
   }
 }
 
-/** Give the agent the recent dialogue so a chat feels continuous despite one-shot runs. */
-function buildPrompt(chatId, text) {
-  const entry = history.get(chatId) ?? [];
-  if (entry.length === 0) {
-    return `${text}\n\nОтвечай по-русски, кратко и по делу — это сообщение в Telegram.`;
+async function handleImageCommand(chatId, prompt) {
+  if (!prompt) {
+    await tg.sendMessage(chatId, 'Формат: /img <описание картинки>');
+    return;
   }
-  const context = entry
-    .map((item) => `${item.role === 'user' ? 'Пользователь' : 'Ты'}: ${item.text}`)
+  if (busy.get(chatId)) {
+    await tg.sendMessage(chatId, 'Сначала дождись предыдущего ответа.');
+    return;
+  }
+
+  busy.set(chatId, true);
+  console.log(`[img] chat=${chatId} chars=${prompt.length}`);
+  await tg.sendChatAction(chatId, 'upload_photo');
+
+  try {
+    const { buffer, contentType, extension } = await generateImage({
+      prompt,
+      model: config.imageModel,
+    });
+    await tg.sendPhoto(chatId, {
+      buffer,
+      contentType,
+      filename: `lyra.${extension}`,
+      caption: truncate(prompt, 900),
+    });
+    console.log(`[img] chat=${chatId} bytes=${buffer.length}`);
+  } catch (error) {
+    console.error(`[img] ${error.message}`);
+    await tg.sendMessage(chatId, `Картинка не получилась: ${truncate(error.message, 400)}`);
+  } finally {
+    busy.delete(chatId);
+  }
+}
+
+async function handleModelCommand(chatId, text) {
+  const [, requested] = text.split(/\s+/, 2);
+  const list = availableProviders();
+
+  if (!requested) {
+    const current = providerFor(chatId);
+    const lines = list.map((item) => `${item.name === current ? '→' : ' '} ${item.name} — ${item.label}`);
+    await tg.sendMessage(chatId, [`Текущая модель: ${current}`, '', ...lines, '', 'Сменить: /model <имя>'].join('\n'));
+    return;
+  }
+
+  if (!PROVIDERS[requested]) {
+    await tg.sendMessage(chatId, `Неизвестная модель: ${requested}. Список: /model`);
+    return;
+  }
+  if (!list.some((item) => item.name === requested)) {
+    const keyEnv = PROVIDERS[requested].keyEnv;
+    await tg.sendMessage(chatId, `Модель ${requested} недоступна: не задан ${keyEnv} в .env.`);
+    return;
+  }
+
+  providers.set(chatId, requested);
+  history.delete(chatId);
+  await tg.sendMessage(chatId, `Переключился на ${requested}. Контекст сброшен.`);
+}
+
+function providerFor(chatId) {
+  const chosen = providers.get(chatId) ?? config.defaultProvider;
+  return PROVIDERS[chosen] ? chosen : 'agent';
+}
+
+function helpText() {
+  const list = availableProviders()
+    .map((item) => `/model ${item.name} — ${item.label}`)
     .join('\n');
-  return `Предыдущий диалог:\n${context}\n\nНовое сообщение пользователя: ${text}\n\nОтвечай по-русски, кратко и по делу — это сообщение в Telegram.`;
+  return [
+    'Lyra AI на связи.',
+    '',
+    'Просто напиши сообщение — отвечу выбранной моделью.',
+    '',
+    '/img <описание> — сгенерировать картинку',
+    '/model — список моделей и текущая',
+    '/reset — очистить контекст диалога',
+    '',
+    list,
+  ].join('\n');
 }
 
 function loadOffset() {
@@ -146,16 +238,6 @@ function die(message) {
   console.error(message);
   process.exit(1);
 }
-
-const HELP_TEXT = [
-  'Lyra AI на связи.',
-  '',
-  'Напиши вопрос — передам его агенту DeepSeek Harness, у которого есть доступ к файлам и терминалу в рабочей папке.',
-  '',
-  '/ask <текст> — явно задать вопрос агенту',
-  '/reset — очистить контекст диалога',
-  '/help — это сообщение',
-].join('\n');
 
 process.on('SIGINT', () => {
   console.log('\nОстановлено.');
