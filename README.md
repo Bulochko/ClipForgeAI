@@ -33,7 +33,9 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 | `TELEGRAM_PROXY` | необязательный прокси (`http://host:port`); включается через `NODE_USE_ENV_PROXY=1` |
 | `AGENT_WORKSPACE` | папка, в которой работает агент (по умолчанию корень репозитория) |
 | `AGENT_TIMEOUT_MS` | таймаут одного ответа, по умолчанию 180000 |
-| `DSH_CLI` | путь к `dsh.cmd`, если установка нестандартная |
+| `DSH_APP_DIR` | папка установки DeepSeek Harness (по умолчанию из `%LOCALAPPDATA%`) |
+| `DSH_APP_EXE`, `DSH_CLI_JS` | точные пути к Electron и CLI JS для нестандартной установки |
+| `DSH_CLI` | путь к `dsh.cmd`, если используется только CLI-обёртка |
 
 ## Команды бота
 
