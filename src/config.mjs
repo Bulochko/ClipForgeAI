@@ -66,6 +66,7 @@ export function loadConfig() {
     historyLimit: Number(pick('HISTORY_LIMIT')) || 8,
     defaultProvider: pick('DEFAULT_PROVIDER') || 'agent',
     imageModel: pick('IMAGE_MODEL') || 'flux',
+    pollinationsKey: pick('POLLINATIONS_API_KEY'),
     mode: (pick('MODE') || 'polling').toLowerCase(),
     webhookUrl: pick('WEBHOOK_URL'),
     webhookPort: Number(pick('WEBHOOK_PORT')) || 8443,
