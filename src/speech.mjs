@@ -37,36 +37,40 @@ async function geminiTts(text) {
   const voice = (process.env.GEMINI_TTS_VOICE ?? '').trim() || 'Kore';
   const trimmed = text.length > 2000 ? `${text.slice(0, 2000)}…` : text;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: trimmed }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-        },
-      }),
-      signal: AbortSignal.timeout(120_000),
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-goog-api-key': key,
     },
-  );
+    body: JSON.stringify({
+      model,
+      input: [{
+        type: 'user_input',
+        content: [{ type: 'text', text: trimmed }],
+      }],
+      // Request a complete WAV file (not headerless streaming PCM).
+      response_format: { type: 'audio', mime_type: 'audio/wav' },
+      generation_config: {
+        speech_config: [{ voice }],
+      },
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(`Gemini TTS: HTTP ${response.status} ${payload?.error?.message ?? ''}`.trim());
   }
 
-  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
-  const audio = parts.map((part) => part.inlineData ?? part.inline_data).find(Boolean);
-  if (!audio?.data) throw new Error('Gemini TTS вернул пустой звук.');
+  const audioData = payload?.output_audio?.data ?? payload?.outputAudio?.data;
+  if (!audioData) throw new Error('Gemini TTS вернул пустой звук.');
 
-  const bytes = Buffer.from(audio.data, 'base64');
-  const mime = String(audio.mimeType ?? audio.mime_type ?? 'audio/wav');
-  const extension = mime.includes('wav') ? 'wav' : mime.includes('mp3') ? 'mp3' : 'wav';
-  if (extension === 'mp3') return toVoiceOpus(bytes, 'mp3');
-  return toVoiceOpus(bytes, 'wav');
+  const mime = String(payload?.output_audio?.mime_type ?? payload?.outputAudio?.mimeType ?? 'audio/wav');
+  if (!mime.includes('wav')) {
+    throw new Error(`Gemini TTS вернул неподдерживаемый формат: ${mime}`);
+  }
+  return toVoiceOpus(Buffer.from(audioData, 'base64'), 'wav');
 }
 
 async function googleTts(clean, lang) {
