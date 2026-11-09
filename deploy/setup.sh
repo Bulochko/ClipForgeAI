@@ -4,7 +4,7 @@
 #   domain — optional; enables webhook mode through Caddy with automatic TLS.
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/Bulochko/Lyra-AI.git}"
+REPO_URL="${REPO_URL:-git@github.com:Bulochko/Lyra-AI.git}"
 APP_DIR="${APP_DIR:-/opt/lyra-ai}"
 DOMAIN="${1:-}"
 
@@ -15,7 +15,7 @@ fi
 
 echo "== пакеты =="
 apt-get update -y
-apt-get install -y git ffmpeg curl ca-certificates gpg
+apt-get install -y git ffmpeg curl ca-certificates gpg openssh-client
 
 NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/' || echo 0)"
 if [[ "${NODE_MAJOR:-0}" -lt 20 ]]; then
@@ -29,12 +29,20 @@ if ! id -u lyra >/dev/null 2>&1; then
   useradd -r -m -d "${APP_DIR}" -s /usr/sbin/nologin lyra
 fi
 
+# Private repositories need a read-only deploy key available to the lyra user.
+GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+if ! runuser -u lyra -- env GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git ls-remote "${REPO_URL}" HEAD >/dev/null 2>&1; then
+  echo "Нет доступа к репозиторию ${REPO_URL}." >&2
+  echo "Настрой read-only GitHub deploy key для пользователя lyra или задай REPO_URL с уже настроенной авторизацией." >&2
+  exit 1
+fi
+
 if [[ -d "${APP_DIR}/.git" ]]; then
-  runuser -u lyra -- git -C "${APP_DIR}" pull --ff-only
+  runuser -u lyra -- env GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git -C "${APP_DIR}" pull --ff-only
 else
   mkdir -p "${APP_DIR}"
   chown lyra:lyra "${APP_DIR}"
-  runuser -u lyra -- git clone "${REPO_URL}" "${APP_DIR}"
+  runuser -u lyra -- env GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git clone "${REPO_URL}" "${APP_DIR}"
 fi
 
 mkdir -p "${APP_DIR}/data"
