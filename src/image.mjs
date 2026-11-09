@@ -1,3 +1,7 @@
+import { loadEnvOnce } from './config.mjs';
+
+loadEnvOnce();
+
 /**
  * Image generation through the current Pollinations API.
  * The API key is kept server-side in POLLINATIONS_API_KEY.
