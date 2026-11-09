@@ -103,13 +103,13 @@ npm test
 Deploy key для него:
 
 ```bash
-sudo useradd -r -m -d /opt/lyra-ai -s /usr/sbin/nologin lyra
-sudo install -d -o lyra -g lyra -m 700 /opt/lyra-ai/.ssh
-sudo -u lyra ssh-keygen -t ed25519 -N "" -f /opt/lyra-ai/.ssh/id_ed25519
-sudo ssh-keyscan github.com | sudo tee /opt/lyra-ai/.ssh/known_hosts >/dev/null
-sudo chown -R lyra:lyra /opt/lyra-ai/.ssh
-sudo chmod 600 /opt/lyra-ai/.ssh/id_ed25519
-sudo cat /opt/lyra-ai/.ssh/id_ed25519.pub
+sudo useradd -r -m -d /home/lyra -s /usr/sbin/nologin lyra
+sudo install -d -o lyra -g lyra -m 700 /home/lyra/.ssh
+sudo -u lyra ssh-keygen -t ed25519 -N "" -f /home/lyra/.ssh/id_ed25519
+sudo ssh-keyscan github.com | sudo tee /home/lyra/.ssh/known_hosts >/dev/null
+sudo chown -R lyra:lyra /home/lyra/.ssh
+sudo chmod 600 /home/lyra/.ssh/id_ed25519
+sudo cat /home/lyra/.ssh/id_ed25519.pub
 ```
 
 Добавь выведенный публичный ключ в GitHub → Settings → Deploy keys репозитория
