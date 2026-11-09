@@ -30,11 +30,11 @@ if ! id -u lyra >/dev/null 2>&1; then
 fi
 
 if [[ -d "${APP_DIR}/.git" ]]; then
-  sudo -u lyra git -C "${APP_DIR}" pull --ff-only
+  runuser -u lyra -- git -C "${APP_DIR}" pull --ff-only
 else
   mkdir -p "${APP_DIR}"
   chown lyra:lyra "${APP_DIR}"
-  sudo -u lyra git clone "${REPO_URL}" "${APP_DIR}"
+  runuser -u lyra -- git clone "${REPO_URL}" "${APP_DIR}"
 fi
 
 mkdir -p "${APP_DIR}/data"
@@ -71,6 +71,6 @@ sleep 2
 systemctl --no-pager --full status lyra-ai || true
 
 echo "== проверка окружения =="
-sudo -u lyra bash -lc "cd '${APP_DIR}' && node src/doctor.mjs --deep" || true
+runuser -u lyra -- bash -lc "cd '${APP_DIR}' && node src/doctor.mjs --deep" || true
 
 echo "Логи: journalctl -u lyra-ai -f"
