@@ -29,7 +29,7 @@ Telegram  ──►  bot.mjs  ──►  dsh headless "<промпт>"  ──�
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | токен бота, обязателен |
 | `DEEPSEEK_API_KEY` | ключ DeepSeek, обязателен для DeepSeek API |
-| `POLLINATIONS_API_KEY` | ключ Pollinations для генерации изображений |
+| `POLLINATIONS_API_KEY` | секретный серверный ключ Pollinations (`sk_`) для изображений |
 | `TELEGRAM_PROXY` | необязательный прокси (`http://host:port`); включается через `NODE_USE_ENV_PROXY=1` |
 | `AGENT_WORKSPACE` | папка, в которой работает агент (по умолчанию корень репозитория) |
 | `AGENT_TIMEOUT_MS` | таймаут одного ответа, по умолчанию 180000 |
