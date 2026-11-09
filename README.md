@@ -99,11 +99,21 @@ npm test
 
 ## Развёртывание на VPS
 
-Репозиторий приватный. Для автоматического клонирования с VPS заранее добавь read-only
-Deploy key в GitHub: создай пользователя `lyra`, сгенерируй для него SSH-ключ,
-добавь публичную часть в Settings → Deploy keys репозитория и проверь доступ командой
-`sudo -u lyra git ls-remote git@github.com:Bulochko/Lyra-AI.git HEAD`.
-Закрытый ключ должен находиться в домашней папке пользователя `lyra`; не помещай его
+Репозиторий приватный. Перед клонированием с VPS создай пользователя и read-only
+Deploy key для него:
+
+```bash
+sudo useradd -r -m -d /opt/lyra-ai -s /usr/sbin/nologin lyra
+sudo install -d -o lyra -g lyra -m 700 /opt/lyra-ai/.ssh
+sudo -u lyra ssh-keygen -t ed25519 -N "" -f /opt/lyra-ai/.ssh/id_ed25519
+sudo ssh-keyscan github.com | sudo tee /opt/lyra-ai/.ssh/known_hosts >/dev/null
+sudo chown -R lyra:lyra /opt/lyra-ai/.ssh
+sudo chmod 600 /opt/lyra-ai/.ssh/id_ed25519
+sudo cat /opt/lyra-ai/.ssh/id_ed25519.pub
+```
+
+Добавь выведенный публичный ключ в GitHub → Settings → Deploy keys репозитория
+с правом только на чтение. Закрытый ключ остаётся на VPS и не должен попадать
 в репозиторий или `.env`.
 
 Два варианта, оба с автоперезапуском.
@@ -111,10 +121,10 @@ Deploy key в GitHub: создай пользователя `lyra`, сгенер
 **Docker (проще)**
 
 ```bash
-git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
+sudo -u lyra git clone git@github.com:Bulochko/Lyra-AI.git /opt/lyra-ai
 cd /opt/lyra-ai
 cp .env.example .env   # заполнить токен, ключи, WEBHOOK_URL, WEBHOOK_SECRET
-docker compose up -d --build
+sudo docker compose up -d --build
 ```
 
 **systemd без Docker**
