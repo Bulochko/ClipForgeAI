@@ -154,7 +154,9 @@ journalctl -u lyra-ai -f
 **Webhook и TLS**
 
 Telegram требует HTTPS, поэтому webhook-порт слушает только localhost, а TLS
-терминирует Caddy:
+терминирует Caddy. Каждый update сначала сохраняется в `data/webhook-queue`, и только
+после этого Telegram получает HTTP 200; обработчик разбирает очередь последовательно.
+Не удаляй папку `data/` и сохраняй её между перезапусками:
 
 ```bash
 sudo apt install -y caddy
