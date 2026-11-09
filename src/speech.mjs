@@ -7,14 +7,69 @@ const TTS_ENDPOINT = 'https://translate.google.com/translate_tts';
 const TTS_LIMIT = 180;
 
 /**
- * Free TTS through the Google Translate endpoint.
- * Long texts are split into chunks whose MP3 frames are concatenated,
- * then re-encoded into OGG/Opus for a Telegram voice message.
+ * Text to speech.
+ * Gemini voices sound far better than the translate endpoint, so they are used
+ * whenever GEMINI_API_KEY is present; Google Translate stays as a free fallback.
  */
 export async function textToSpeech(text, { lang } = {}) {
   const clean = String(text ?? '').trim();
   if (!clean) throw new Error('Нечего озвучивать.');
 
+  const backend =
+    (process.env.TTS_BACKEND ?? '').trim().toLowerCase() ||
+    ((process.env.GEMINI_API_KEY ?? '').trim() ? 'gemini' : 'google');
+
+  if (backend === 'gemini') {
+    try {
+      return await geminiTts(clean);
+    } catch (error) {
+      console.warn(`[tts] Gemini не справился, переключаюсь на Google: ${error.message}`);
+    }
+  }
+  return googleTts(clean, lang);
+}
+
+async function geminiTts(text) {
+  const key = (process.env.GEMINI_API_KEY ?? '').trim();
+  if (!key) throw new Error('нет GEMINI_API_KEY');
+
+  const model = (process.env.GEMINI_TTS_MODEL ?? '').trim() || 'gemini-3.8-flash-tts';
+  const voice = (process.env.GEMINI_TTS_VOICE ?? '').trim() || 'Kore';
+  const trimmed = text.length > 2000 ? `${text.slice(0, 2000)}…` : text;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: trimmed }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      }),
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(`Gemini TTS: HTTP ${response.status} ${payload?.error?.message ?? ''}`.trim());
+  }
+
+  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
+  const audio = parts.map((part) => part.inlineData ?? part.inline_data).find(Boolean);
+  if (!audio?.data) throw new Error('Gemini TTS вернул пустой звук.');
+
+  const bytes = Buffer.from(audio.data, 'base64');
+  const mime = String(audio.mimeType ?? audio.mime_type ?? 'audio/wav');
+  const extension = mime.includes('wav') ? 'wav' : mime.includes('mp3') ? 'mp3' : 'wav';
+  if (extension === 'mp3') return toVoiceOpus(bytes, 'mp3');
+  return toVoiceOpus(bytes, 'wav');
+}
+
+async function googleTts(clean, lang) {
   const language = lang ?? (/[А-Яа-яЁё]/.test(clean) ? 'ru' : 'en');
   const chunks = splitForTts(clean);
   const parts = [];
@@ -117,7 +172,16 @@ const MIME_BY_EXT = {
 };
 
 async function geminiTranscribe(input, inputExt, key) {
-  const mime = MIME_BY_EXT[String(inputExt).toLowerCase()] ?? 'audio/ogg';
+  const extension = String(inputExt).toLowerCase();
+  let mime = MIME_BY_EXT[extension] ?? 'audio/ogg';
+  let payloadBytes = input;
+
+  // The transcription model accepts audio only, so video notes are demuxed first.
+  if (mime.startsWith('video/')) {
+    payloadBytes = await toWav(input, extension);
+    mime = 'audio/wav';
+  }
+
   const model = (process.env.GEMINI_STT_MODEL ?? '').trim() || 'gemini-3.5-transcribe';
 
   const response = await fetch(
@@ -130,7 +194,7 @@ async function geminiTranscribe(input, inputExt, key) {
           {
             role: 'user',
             parts: [
-              { inline_data: { mime_type: mime, data: input.toString('base64') } },
+              { inline_data: { mime_type: mime, data: payloadBytes.toString('base64') } },
               { text: 'Расшифруй аудио дословно на языке записи, без комментариев и пояснений.' },
             ],
           },
