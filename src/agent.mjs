@@ -15,7 +15,10 @@ const DEFAULT_DSH_CMD =
  */
 export function describeLauncher() {
   const appExe = (process.env.DSH_APP_EXE ?? '').trim() || DEFAULT_APP_EXE;
-  return existsSync(appExe) ? appExe : (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD;
+  const cliJs = (process.env.DSH_CLI_JS ?? '').trim() || DEFAULT_CLI_JS;
+  return existsSync(appExe) && existsSync(cliJs)
+    ? appExe
+    : (process.env.DSH_CLI ?? '').trim() || DEFAULT_DSH_CMD;
 }
 
 /** The DSH agent only exists where the Desktop app is installed (the local PC). */
@@ -31,8 +34,8 @@ export function agentAvailable() {
 
 function buildCommand(prompt) {
   const appExe = (process.env.DSH_APP_EXE ?? '').trim() || DEFAULT_APP_EXE;
-  if (existsSync(appExe)) {
-    const cliJs = (process.env.DSH_CLI_JS ?? '').trim() || DEFAULT_CLI_JS;
+  const cliJs = (process.env.DSH_CLI_JS ?? '').trim() || DEFAULT_CLI_JS;
+  if (existsSync(appExe) && existsSync(cliJs)) {
     return {
       file: appExe,
       args: ['--expose-internals', cliJs, 'headless', prompt],
