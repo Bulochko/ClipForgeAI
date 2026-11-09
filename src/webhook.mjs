@@ -6,6 +6,13 @@ import { createServer } from 'node:http';
  * (Caddy, nginx or a platform edge). The shared secret header guards the endpoint.
  */
 export function startWebhookServer({ port, secret, onUpdate, path = '/telegram', host = '0.0.0.0' }) {
+  if (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
+    throw new Error('A valid Telegram webhook secret is required.');
+  }
+  if (typeof onUpdate !== 'function') {
+    throw new TypeError('onUpdate must be a function.');
+  }
+
   const server = createServer(async (request, response) => {
     if (request.method === 'GET') {
       const isHealth = request.url === '/health';
@@ -36,16 +43,22 @@ export function startWebhookServer({ port, secret, onUpdate, path = '/telegram',
       }
     }
 
-    // Acknowledge immediately: Telegram retries anything slower than ~60s.
+    let update;
+    try {
+      update = JSON.parse(body);
+    } catch (error) {
+      response.writeHead(400, { 'content-type': 'text/plain' });
+      response.end('invalid JSON');
+      return;
+    }
+
+    // Acknowledge quickly; the persistent Node process continues handling the update.
     response.writeHead(200, { 'content-type': 'text/plain' });
     response.end('ok');
 
-    try {
-      const update = JSON.parse(body);
-      void onUpdate(update);
-    } catch (error) {
-      console.error(`[webhook] ${error.message}`);
-    }
+    Promise.resolve()
+      .then(() => onUpdate(update))
+      .catch((error) => console.error(`[webhook] ${error?.message ?? error}`));
   });
 
   return new Promise((resolve, reject) => {
