@@ -24,7 +24,8 @@ Telegram  ──►  bot.mjs  ──►  providers.mjs  ──►  AI provider  
 1. Скопируй `.env.example` в `.env`.
 2. `TELEGRAM_BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather).
 3. Добавь хотя бы один ключ AI-провайдера: `GEMINI_API_KEY`, `GROQ_API_KEY`,
-   `OPENROUTER_API_KEY` или `DEEPSEEK_API_KEY`.
+   `OPENROUTER_API_KEY` или `DEEPSEEK_API_KEY`. На ПК с установленным DSH можно
+   использовать локального агента вместо API-провайдера.
 4. Запусти `run.cmd` (использует Node из DeepSeek Harness, ставить ничего не нужно).
 
 ## Переменные окружения
