@@ -24,5 +24,6 @@ jobs:
           for file in src/*.mjs tests/*.mjs; do
             node --check "$file"
           done
+          bash -n deploy/setup.sh
       - name: Run tests
         run: npm test
