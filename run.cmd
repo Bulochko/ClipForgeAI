@@ -17,7 +17,7 @@ if defined TELEGRAM_PROXY (
   set "HTTP_PROXY=%TELEGRAM_PROXY%"
   set "HTTPS_PROXY=%TELEGRAM_PROXY%"
   set "NODE_USE_ENV_PROXY=1"
-  echo [run] using proxy %TELEGRAM_PROXY%
+  echo [run] Telegram proxy configured
 )
 
 set "PATH=%APP_DIR%\resources\runtime\bin;%PATH%"
