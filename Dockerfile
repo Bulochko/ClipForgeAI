@@ -8,8 +8,12 @@ RUN apt-get update \
 WORKDIR /app
 
 # No npm dependencies: the bot only uses Node built-ins.
-COPY package.json ./
-COPY src ./src
+COPY --chown=node:node package.json ./
+COPY --chown=node:node src ./src
+
+# The bot only needs write access to its runtime data directory.
+RUN mkdir -p /app/data && chown -R node:node /app
+USER node
 
 ENV NODE_ENV=production
 ENV MODE=webhook
