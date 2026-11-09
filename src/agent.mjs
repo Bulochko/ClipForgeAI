@@ -1,12 +1,17 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
-const DEFAULT_APP_EXE =
-  'C:\\Users\\Korobka\\AppData\\Local\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe';
-const DEFAULT_CLI_JS =
-  'C:\\Users\\Korobka\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js';
-const DEFAULT_DSH_CMD =
-  'C:\\Users\\Korobka\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\runtime\\cli\\bin\\dsh.cmd';
+const DEFAULT_APP_DIR = process.env.LOCALAPPDATA
+  ? join(process.env.LOCALAPPDATA, 'Programs', 'DeepSeek Harness')
+  : '';
+const DEFAULT_APP_EXE = DEFAULT_APP_DIR ? join(DEFAULT_APP_DIR, 'DeepSeek Harness.exe') : '';
+const DEFAULT_CLI_JS = DEFAULT_APP_DIR
+  ? join(DEFAULT_APP_DIR, 'resources', 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
+  : '';
+const DEFAULT_DSH_CMD = DEFAULT_APP_DIR
+  ? join(DEFAULT_APP_DIR, 'resources', 'runtime', 'cli', 'bin', 'dsh.cmd')
+  : '';
 
 /**
  * The agent is launched through the Electron binary in Node mode and the Desktop
