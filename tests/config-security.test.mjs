@@ -46,3 +46,16 @@ test('rate limit zero is preserved as disabled', () => {
     else process.env.RATE_LIMIT_PER_MIN = original;
   }
 });
+
+test('negative and fractional rate limits fall back to the safe default', () => {
+  const original = process.env.RATE_LIMIT_PER_MIN;
+  try {
+    process.env.RATE_LIMIT_PER_MIN = '-1';
+    assert.equal(loadConfig().rateLimitPerMin, 12);
+    process.env.RATE_LIMIT_PER_MIN = '0.5';
+    assert.equal(loadConfig().rateLimitPerMin, 12);
+  } finally {
+    if (original === undefined) delete process.env.RATE_LIMIT_PER_MIN;
+    else process.env.RATE_LIMIT_PER_MIN = original;
+  }
+});
