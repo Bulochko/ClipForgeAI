@@ -6,6 +6,7 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:Bulochko/Lyra-AI.git}"
 APP_DIR="${APP_DIR:-/opt/lyra-ai}"
+LYRA_HOME="${LYRA_HOME:-/home/lyra}"
 DOMAIN="${1:-}"
 
 if [[ ${EUID} -ne 0 ]]; then
@@ -26,8 +27,13 @@ fi
 
 echo "== пользователь и код =="
 if ! id -u lyra >/dev/null 2>&1; then
-  useradd -r -m -d "${APP_DIR}" -s /usr/sbin/nologin lyra
+  useradd -r -m -d "${LYRA_HOME}" -s /usr/sbin/nologin lyra
 fi
+
+# The deploy key lives in the lyra user's home, separate from the application directory.
+mkdir -p "${LYRA_HOME}/.ssh"
+chown -R lyra:lyra "${LYRA_HOME}/.ssh"
+chmod 700 "${LYRA_HOME}/.ssh"
 
 # Private repositories need a read-only deploy key available to the lyra user.
 GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
