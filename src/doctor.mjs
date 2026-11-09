@@ -38,7 +38,8 @@ record(
 
 if (config.mode === 'webhook') {
   record('webhook настроен', Boolean(config.webhookUrl), config.webhookUrl || 'WEBHOOK_URL пуст');
-  record('webhook secret', Boolean(config.webhookSecret), config.webhookSecret ? 'задан' : 'рекомендуется задать');
+  const validSecret = /^[A-Za-z0-9_-]{1,256}$/.test(config.webhookSecret);
+  record('webhook secret', validSecret, validSecret ? 'формат корректен' : 'обязателен: 1–256 символов A–Z, a–z, 0–9, _ или -');
 }
 
 // 2. Telegram reachability + token validity
