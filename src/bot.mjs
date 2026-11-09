@@ -12,6 +12,9 @@ import { startWebhookServer } from './webhook.mjs';
 import { createLimiter } from './ratelimit.mjs';
 
 const config = loadConfig();
+if (!['polling', 'webhook'].includes(config.mode)) {
+  die('MODE должен быть polling или webhook.');
+}
 const stateDir = join(config.root, 'data');
 mkdirSync(stateDir, { recursive: true });
 const offsetFile = join(stateDir, 'offset.json');
