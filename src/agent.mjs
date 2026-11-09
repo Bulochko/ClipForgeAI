@@ -19,8 +19,7 @@ const AGENT_ENV_KEYS = [
   'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
   'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
   'HOMEDRIVE', 'HOMEPATH', 'USERNAME', 'HOME',
-  'PROCESSOR_ARCHITECTURE', 'OS', 'NODE_ENV',
-  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+  'PROCESSOR_ARCHITECTURE', 'OS', 'NODE_ENV', 'NO_PROXY',
   'DEEPSEEK_API_KEY',
 ];
 
@@ -29,6 +28,17 @@ export function createAgentEnv(source = process.env, { electron = false } = {}) 
   const env = {};
   for (const name of AGENT_ENV_KEYS) {
     if (source[name] !== undefined) env[name] = source[name];
+  }
+  // Proxy URLs can contain credentials; pass only unauthenticated proxy endpoints.
+  for (const name of ['HTTP_PROXY', 'HTTPS_PROXY']) {
+    const value = source[name];
+    if (!value) continue;
+    try {
+      const proxy = new URL(value);
+      if (!proxy.username && !proxy.password) env[name] = value;
+    } catch {
+      // Ignore malformed proxy values in the child environment.
+    }
   }
   if (electron) env.ELECTRON_RUN_AS_NODE = '1';
   return env;
