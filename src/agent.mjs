@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadEnvOnce } from './config.mjs';
+
+loadEnvOnce();
 
 const DEFAULT_APP_DIR = (process.env.DSH_APP_DIR ?? '').trim() ||
   (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'Programs', 'DeepSeek Harness') : '');
