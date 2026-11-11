@@ -12,6 +12,7 @@ DefaultDirName={localappdata}\Programs\ClipForgeAI
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+ArchitecturesAllowed=x64
 OutputDir=..\dist\installer
 OutputBaseFilename=ClipForgeAI-Setup-{#MyAppVersion}-x64
 Compression=lzma2
