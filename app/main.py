@@ -21,7 +21,8 @@ for folder in (PROJECTS, EXPORTS): folder.mkdir(parents=True, exist_ok=True)
 
 def find_bin(name: str) -> str | None:
     exe = name + (".exe" if os.name == "nt" else "")
-    local = Path(__file__).resolve().parent.parent / "tools" / exe
+    bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    local = bundle_root / "tools" / exe
     if local.exists(): return str(local)
     return shutil.which(exe)
 
@@ -113,7 +114,7 @@ class MainWindow(QMainWindow):
         self.ai_table=QTableWidget(0,5); self.ai_table.setHorizontalHeaderLabels(["Оценка","Название","Начало","Конец","Почему выбрано"]); self.ai_table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeToContents); self.ai_table.horizontalHeader().setSectionResizeMode(4,QHeaderView.Stretch); self.ai_table.setSelectionBehavior(QAbstractItemView.SelectRows); self.ai_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.ai_table.cellDoubleClicked.connect(self.select_ai_clip); av.addWidget(self.ai_table)
         ai_actions=QHBoxLayout(); self.use_clip_btn=QPushButton("Использовать выбранный фрагмент"); self.use_clip_btn.clicked.connect(self.use_selected_ai_clip); ai_actions.addWidget(self.use_clip_btn); ai_actions.addStretch(); av.addLayout(ai_actions); av.addStretch(); tabs.addTab(ai,"AI Analyzer")
         settings=QWidget(); sv=QVBoxLayout(settings); sv.addWidget(QLabel("Локальные настройки")); sv.addWidget(QLabel(f"Рабочая папка: {ROOT}")); sv.addWidget(QLabel("FFmpeg и FFprobe должны быть доступны через PATH или лежать в папке tools рядом с программой.")); sv.addStretch(); tabs.addTab(settings,"Настройки")
-        foot=QLabel("CLIPFORGE AI  •  LOCAL BUILD  •  0.1.0"); foot.setObjectName("Muted"); main.addWidget(foot)
+        foot=QLabel("CLIPFORGE AI  •  WINDOWS FULL BUILD  •  0.3.0"); foot.setObjectName("Muted"); main.addWidget(foot)
 
     def check_ffmpeg(self):
         ok=find_bin("ffmpeg") and find_bin("ffprobe")
