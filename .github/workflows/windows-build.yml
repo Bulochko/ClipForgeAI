@@ -33,6 +33,10 @@ jobs:
           $exe = Resolve-Path "dist\ClipForgeAI\ClipForge AI.exe"
           $p = Start-Process -FilePath $exe -PassThru
           Start-Sleep -Seconds 12
+          $p.Refresh()
+          if ($p.MainWindowTitle -match "(?i)unhandled exception|failed to execute script") {
+            throw "GUI startup displayed an exception dialog: $($p.MainWindowTitle)"
+          }
           if ($p.HasExited) {
             if ($p.ExitCode -ne 0) { throw "GUI exited early with code $($p.ExitCode)" }
           } else {
