@@ -11,6 +11,11 @@ for name in ("ffmpeg.exe", "ffprobe.exe"):
     if not path.is_file():
         raise SystemExit(f"Required bundled dependency is missing: {path}")
     binaries.append((str(path), "tools"))
+for path in TOOLS.glob("*.dll"):
+    binaries.append((str(path), "tools"))
+license_path = TOOLS / "COPYING.LGPLv2.1"
+if license_path.is_file():
+    datas.append((str(license_path), "tools"))
 hiddenimports = ["shiboken6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
 for package in ("faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"):
     try:
