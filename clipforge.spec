@@ -18,13 +18,10 @@ if license_path.is_file():
     datas.append((str(license_path), "tools"))
 hiddenimports = ["shiboken6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
 for package in ("faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"):
-    try:
-        package_datas, package_bins, package_hidden = collect_all(package)
-        datas += package_datas
-        binaries += package_bins
-        hiddenimports += package_hidden
-    except Exception:
-        pass
+    package_datas, package_bins, package_hidden = collect_all(package)
+    datas += package_datas
+    binaries += package_bins
+    hiddenimports += package_hidden
 a = Analysis([str(APP / "main.py")], pathex=[str(APP), str(ROOT)],
     binaries=binaries, datas=datas, hiddenimports=hiddenimports,
     hookspath=[], hooksconfig={}, runtime_hooks=[],
