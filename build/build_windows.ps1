@@ -55,13 +55,14 @@ if ($LASTEXITCODE -ne 0) { throw "Dependency check failed." }
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 Copy-Item README.md, AI_MODELS.md, THIRD_PARTY_NOTICES.txt, INSTALL_AI.bat -Destination dist\ClipForgeAI\ -Force
 Write-Host "Portable folder created: dist\ClipForgeAI" -ForegroundColor Green
-$Iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-if (-not $Iscc) {
+$IsccCommand = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+$IsccPath = if ($IsccCommand) { $IsccCommand.Source } else { $null }
+if (-not $IsccPath) {
     $Candidate = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
-    if (Test-Path $Candidate) { $Iscc = Get-Item $Candidate }
+    if (Test-Path $Candidate) { $IsccPath = $Candidate }
 }
-if ($Iscc) {
+if ($IsccPath) {
     New-Item -ItemType Directory -Force dist\installer | Out-Null
-    & $Iscc.Source installer\ClipForgeAI.iss
+    & $IsccPath installer\ClipForgeAI.iss
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 } else { Write-Warning "Inno Setup 6 not found; installer skipped." }
