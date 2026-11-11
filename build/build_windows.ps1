@@ -22,18 +22,23 @@ $Ffprobe = Get-ChildItem $Extract -Filter ffprobe.exe -Recurse | Select-Object -
 if (-not $Ffmpeg -or -not $Ffprobe) { throw "FFmpeg archive missing executables." }
 Copy-Item $Ffmpeg.FullName (Join-Path $Root "tools\ffmpeg.exe") -Force
 Copy-Item $Ffprobe.FullName (Join-Path $Root "tools\ffprobe.exe") -Force
+Get-ChildItem $Extract -Filter *.dll -Recurse | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $Root ("tools\" + $_.Name)) -Force
+}
 $License = & (Join-Path $Root "tools\ffmpeg.exe") -L 2>&1 | Out-String
 if ($License -notmatch "LGPL") { throw "FFmpeg binary does not report LGPL. Refusing to bundle it." }
-Invoke-WebRequest -Uri "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt" -OutFile (Join-Path $Root "tools\\COPYING.LGPLv2.1")
-$EncoderList = & (Join-Path $Root "tools\\ffmpeg.exe") -hide_banner -encoders 2>&1 | Out-String
+Invoke-WebRequest -Uri "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt" -OutFile (Join-Path $Root "tools\COPYING.LGPLv2.1")
+$EncoderList = & (Join-Path $Root "tools\ffmpeg.exe") -hide_banner -encoders 2>&1 | Out-String
 if ($EncoderList -notmatch "mpeg4") { throw "FFmpeg build has no MP4 video encoder." }
 Set-Content -Path (Join-Path $Root "THIRD_PARTY_NOTICES.txt") -Value @"
 ClipForge AI third-party components
 
-FFmpeg: BtbN/FFmpeg-Builds LGPL variant.
+FFmpeg: BtbN/FFmpeg-Builds LGPL shared variant.
+LGPL text: tools\COPYING.LGPLv2.1
 License/build details: tools\ffmpeg.exe -L and -buildconf
 Source: https://ffmpeg.org/
 Build distribution: https://github.com/BtbN/FFmpeg-Builds
+Shared FFmpeg DLLs are bundled to support replacement under LGPL terms.
 
 PySide6 / Qt, faster-whisper, CTranslate2 and PyAV are third-party components
 under their respective licenses. Consult upstream license files.
