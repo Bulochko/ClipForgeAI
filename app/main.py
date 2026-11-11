@@ -50,7 +50,17 @@ class RenderWorker(QThread):
         if self.ratio == "9:16": filt="scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
         elif self.ratio == "1:1": filt="scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080"
         else: filt="scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
-        cmd=[ffmpeg,"-y","-ss",str(self.start_at),"-i",self.source,"-t",str(self.end_at-self.start_at),"-vf",filt,"-c:v","libx264","-preset","veryfast","-crf","20","-c:a","aac","-b:a","192k","-movflags","+faststart",self.output]
+        encoder_probe = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True)
+        available = (encoder_probe.stdout or "") + (encoder_probe.stderr or "")
+        if "h264_nvenc" in available:
+            video_codec = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "21"]
+        elif "libx264" in available:
+            video_codec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+        elif "libopenh264" in available:
+            video_codec = ["-c:v", "libopenh264", "-b:v", "6M"]
+        else:
+            video_codec = ["-c:v", "mpeg4", "-q:v", "3"]
+        cmd=[ffmpeg,"-y","-ss",str(self.start_at),"-i",self.source,"-t",str(self.end_at-self.start_at),"-vf",filt,*video_codec,"-c:a","aac","-b:a","192k","-movflags","+faststart",self.output]
         p=subprocess.run(cmd, capture_output=True, text=True)
         if p.returncode: self.failed.emit(p.stderr[-1800:] or "Ошибка FFmpeg")
         else: self.done.emit(self.output)
