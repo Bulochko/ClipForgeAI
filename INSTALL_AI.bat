@@ -1,37 +1,31 @@
 @echo off
 chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
 echo =============================================
-echo       ClipForge AI - Local AI components
+echo       ClipForge AI - Optional AI setup
 echo =============================================
-if not exist .venv\Scripts\activate.bat (
-  echo Сначала запусти START_CLIPFORGE.bat, чтобы создать окружение.
-  pause
-  exit /b 1
-)
-call .venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install faster-whisper
-if errorlevel 1 goto error
 where ollama >nul 2>nul
 if errorlevel 1 (
-  echo.
-  echo Ollama не найден.
-  echo Установи его с https://ollama.com/download/windows
-  echo Затем снова запусти INSTALL_AI.bat для загрузки модели.
+  echo Ollama is not installed. It is optional and is not bundled with ClipForge AI.
+  echo Install it manually from https://ollama.com/download/windows
   start https://ollama.com/download/windows
+  echo After installation, run this file again.
   pause
   exit /b 0
 )
 echo.
-echo Загружаем Qwen3 4B для локального анализа транскрипта...
+echo Downloading the Qwen3 4B language model for local transcript scoring...
 ollama pull qwen3:4b
 if errorlevel 1 goto error
 echo.
-echo AI-компоненты установлены. Перезапусти ClipForge AI.
+echo Qwen3 4B is ready.
+echo Whisper speech-recognition weights are downloaded separately when you
+echo select a Whisper model in the AI Analyzer and start the first analysis.
+echo No model weights are included in the portable archive or installer.
 pause
 exit /b 0
 :error
-echo Не удалось установить один из компонентов. Проверь сообщения выше.
+echo Model download failed. Check that Ollama is running and try again.
 pause
 exit /b 1
