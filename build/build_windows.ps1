@@ -4,7 +4,9 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 Write-Host "== ClipForge AI Windows x64 build ==" -ForegroundColor Cyan
 if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) { throw "Python launcher '$Python' was not found." }
-& $Python -3.11 -c "import sys; assert sys.version_info[:2] == (3,11), sys.version"
+$PythonArgs = @()
+if ([System.IO.Path]::GetFileNameWithoutExtension($Python) -eq "py") { $PythonArgs = @("-3.11") }
+& $Python @PythonArgs -c "import sys; assert sys.version_info[:2] == (3,11), sys.version"
 if ($LASTEXITCODE -ne 0) { throw "Python 3.11 is required." }
 if (-not $SkipClean) { Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force tools | Out-Null
@@ -33,7 +35,7 @@ Build distribution: https://github.com/BtbN/FFmpeg-Builds
 PySide6 / Qt, faster-whisper, CTranslate2 and PyAV are third-party components
 under their respective licenses. Consult upstream license files.
 "@ -Encoding UTF8
-& $Python -3.11 -m venv .venv-build
+& $Python @PythonArgs -m venv .venv-build
 $VenvPython = Join-Path $Root ".venv-build\Scripts\python.exe"
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r requirements-build.txt
