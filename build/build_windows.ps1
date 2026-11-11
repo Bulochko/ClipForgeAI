@@ -61,6 +61,7 @@ if (-not $Iscc) {
     if (Test-Path $Candidate) { $Iscc = Get-Item $Candidate }
 }
 if ($Iscc) {
+    New-Item -ItemType Directory -Force dist\installer | Out-Null
     & $Iscc.Source installer\ClipForgeAI.iss
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 } else { Write-Warning "Inno Setup 6 not found; installer skipped." }
