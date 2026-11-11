@@ -11,7 +11,7 @@ if ($LASTEXITCODE -ne 0) { throw "Python 3.11 is required." }
 if (-not $SkipClean) { Remove-Item -Recurse -Force .build-temp, dist -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force tools | Out-Null
 $FfmpegZip = Join-Path $env:TEMP "clipforge-ffmpeg-lgpl.zip"
-$FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip"
+$FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl-shared.zip"
 Write-Host "Downloading LGPL FFmpeg build..."
 Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip
 $Extract = Join-Path $env:TEMP "clipforge-ffmpeg"
@@ -24,6 +24,9 @@ Copy-Item $Ffmpeg.FullName (Join-Path $Root "tools\ffmpeg.exe") -Force
 Copy-Item $Ffprobe.FullName (Join-Path $Root "tools\ffprobe.exe") -Force
 $License = & (Join-Path $Root "tools\ffmpeg.exe") -L 2>&1 | Out-String
 if ($License -notmatch "LGPL") { throw "FFmpeg binary does not report LGPL. Refusing to bundle it." }
+Invoke-WebRequest -Uri "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt" -OutFile (Join-Path $Root "tools\\COPYING.LGPLv2.1")
+$EncoderList = & (Join-Path $Root "tools\\ffmpeg.exe") -hide_banner -encoders 2>&1 | Out-String
+if ($EncoderList -notmatch "mpeg4") { throw "FFmpeg build has no MP4 video encoder." }
 Set-Content -Path (Join-Path $Root "THIRD_PARTY_NOTICES.txt") -Value @"
 ClipForge AI third-party components
 
