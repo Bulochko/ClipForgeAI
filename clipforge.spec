@@ -13,7 +13,7 @@ for name in ("ffmpeg.exe", "ffprobe.exe"):
     binaries.append((str(path), "tools"))
 for path in TOOLS.glob("*.dll"):
     binaries.append((str(path), "tools"))
-license_path = TOOLS / "COPYING.LGPLv2.1"
+license_path = TOOLS / "COPYING.LGPLv3"
 if license_path.is_file():
     datas.append((str(license_path), "tools"))
 hiddenimports = ["shiboken6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]

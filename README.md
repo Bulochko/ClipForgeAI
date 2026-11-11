@@ -28,7 +28,11 @@ The project provides a Windows x64 build pipeline:
    .\build\build_windows.ps1
    ```
 
-The script downloads the LGPL FFmpeg build, installs build dependencies into `.venv-build`, checks dependencies, creates the PyInstaller folder and compiles the installer when Inno Setup is available.
+The script downloads a pinned Windows x64 shared FFmpeg build from [FFmpeg-Builds](https://github.com/FFmpeg-Builds/FFmpeg-Builds), verifies its SHA-256, and checks the executable architecture, `-version`, `-buildconf`, and reported license before bundling. It refuses builds with `--enable-gpl` or `--enable-nonfree`, requires the expected LGPL-3.0-or-later license and the `mpeg4` encoder, and stages the shared DLLs alongside FFmpeg for PyInstaller. The portable distribution includes the corresponding LGPL text and generated `THIRD_PARTY_NOTICES.txt`.
+
+To upgrade FFmpeg, update the pinned release tag, archive URL, and SHA-256 together in `build/build_windows.ps1`. Keep the LGPL shared variant and verify the new binary's license and configuration; the build intentionally fails if any check disagrees.
+
+After FFmpeg validation, the script installs build dependencies into `.venv-build`, checks dependencies, creates the PyInstaller folder and compiles the installer when Inno Setup is available. It also runs the packaged FFmpeg/FFprobe checks against the portable output before compiling the installer.
 
 ### Build with GitHub Actions
 

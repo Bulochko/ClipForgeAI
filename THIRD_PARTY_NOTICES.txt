@@ -1,0 +1,12 @@
+ClipForge AI third-party components
+
+FFmpeg: LGPL-3.0-or-later, Windows x64 shared build.
+Archive: ffmpeg-N-128790-g9bee1e603c-win64-lgpl-shared.zip
+Archive SHA-256: f9d002b1da11eb579ecfb1bade24b3ecc53cd2e7715434c9a3591868dc515471
+Release: https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-11-11-12-39
+License text: tools\COPYING.LGPLv3 (https://www.gnu.org/licenses/lgpl-3.0.txt)
+FFmpeg source: https://ffmpeg.org/
+Shared FFmpeg DLLs are bundled to support replacement under LGPL terms.
+
+PySide6 / Qt, faster-whisper, CTranslate2 and PyAV are third-party components
+under their respective licenses. Consult upstream license files.
