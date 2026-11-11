@@ -20,6 +20,7 @@ $FfmpegUrl = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/$
 $FfmpegSha256 = "f9d002b1da11eb579ecfb1bade24b3ecc53cd2e7715434c9a3591868dc515471"
 $FfmpegLicense = "LGPL-3.0-or-later"
 $FfmpegLicenseUrl = "https://www.gnu.org/licenses/lgpl-3.0.txt"
+$FfmpegLicenseTextSha256 = "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
 
 function Invoke-CheckedNative {
     param(
@@ -137,11 +138,25 @@ if (-not $SkipClean) { Remove-Item -Recurse -Force .build-temp, dist -ErrorActio
 New-Item -ItemType Directory -Force tools | Out-Null
 
 $FfmpegZip = Join-Path $env:TEMP "clipforge-ffmpeg-lgpl-win64.zip"
+$FfmpegDownload = "$FfmpegZip.download"
 Write-Host "Downloading pinned Windows x64 LGPL FFmpeg release $FfmpegReleaseTag..."
+Remove-Item -LiteralPath $FfmpegDownload -Force -ErrorAction SilentlyContinue
 try {
-    Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip -TimeoutSec 180 -ErrorAction Stop
+    Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegDownload -TimeoutSec 180 -ErrorAction Stop
 } catch {
-    throw "Could not download FFmpeg archive '$FfmpegArchiveName' from $FfmpegUrl. $($_.Exception.Message)"
+    $DownloadError = $_.Exception.Message
+    Remove-Item -LiteralPath $FfmpegDownload -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $FfmpegZip -PathType Leaf)) {
+        throw "Could not download FFmpeg archive '$FfmpegArchiveName' from $FfmpegUrl and no verified cached copy exists. $DownloadError"
+    }
+    $CachedSha256 = (Get-FileHash -LiteralPath $FfmpegZip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($CachedSha256 -ne $FfmpegSha256) {
+        throw "FFmpeg download failed and the cached archive SHA-256 is invalid. Expected $FfmpegSha256; got $CachedSha256. $DownloadError"
+    }
+    Write-Warning "FFmpeg download failed; using the cached archive after its pinned SHA-256 was verified."
+}
+if (Test-Path -LiteralPath $FfmpegDownload -PathType Leaf) {
+    Move-Item -LiteralPath $FfmpegDownload -Destination $FfmpegZip -Force
 }
 if (-not (Test-Path -LiteralPath $FfmpegZip -PathType Leaf)) {
     throw "FFmpeg download did not create the expected archive: $FfmpegZip"
@@ -183,14 +198,16 @@ foreach ($Dll in $DllMatches) {
 Assert-FfmpegBundle -Directory (Join-Path $Root "tools") -Label "Staged FFmpeg bundle"
 
 $LicensePath = Join-Path $Root "tools\COPYING.LGPLv3"
-try {
-    Invoke-WebRequest -Uri $FfmpegLicenseUrl -OutFile $LicensePath -TimeoutSec 60 -ErrorAction Stop
-} catch {
-    throw "Could not download the official GNU LGPL v3 license text from $FfmpegLicenseUrl. $($_.Exception.Message)"
+$LicenseSourcePath = Join-Path $Root "licenses\COPYING.LGPLv3"
+if (-not (Test-Path -LiteralPath $LicenseSourcePath -PathType Leaf)) {
+    throw "The checked-in LGPL v3 license text is missing: $LicenseSourcePath"
 }
-if (-not (Test-Path -LiteralPath $LicensePath -PathType Leaf) -or (Get-Item $LicensePath).Length -eq 0) {
-    throw "The official LGPL v3 license text was not downloaded correctly."
+$LicenseTextSha256 = (Get-FileHash -LiteralPath $LicenseSourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($LicenseTextSha256 -ne $FfmpegLicenseTextSha256) {
+    throw "LGPL license text SHA-256 mismatch. Expected $FfmpegLicenseTextSha256; got $LicenseTextSha256."
 }
+Copy-Item -LiteralPath $LicenseSourcePath -Destination $LicensePath -Force
+Write-Host "[OK] Official LGPL v3 license text SHA-256 verified: $LicenseTextSha256"
 
 Set-Content -Path (Join-Path $Root "THIRD_PARTY_NOTICES.txt") -Value @"
 ClipForge AI third-party components
@@ -218,10 +235,33 @@ if ($LASTEXITCODE -ne 0) { throw "Build dependency installation failed." }
 $env:PATH = "$(Join-Path $Root 'tools');$env:PATH"
 & $VenvPython build\check_dependencies.py
 if ($LASTEXITCODE -ne 0) { throw "Dependency check failed." }
-& $VenvPython -m PyInstaller --noconfirm --clean --workpath .build-temp clipforge.spec
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
+
+# Keep unrelated host DLL directories (for example, a bundled Poppler/ICU in
+# the Codex runtime PATH) out of PyInstaller's dependency resolution. FFmpeg is
+# staged in tools; the remaining native dependencies are collected from the
+# build venv or resolved from Windows system directories.
+$PathBeforePyInstaller = $env:PATH
+$PyInstallerPath = @(
+    (Join-Path $Root "tools")
+    (Join-Path $Root ".venv-build\Scripts")
+    (Join-Path $env:SystemRoot "System32")
+    $env:SystemRoot
+) | Select-Object -Unique
+$env:PATH = $PyInstallerPath -join [System.IO.Path]::PathSeparator
+try {
+    & $VenvPython -m PyInstaller --noconfirm --clean --workpath .build-temp clipforge.spec
+    $PyInstallerExitCode = $LASTEXITCODE
+} finally {
+    $env:PATH = $PathBeforePyInstaller
+}
+if ($PyInstallerExitCode -ne 0) { throw "PyInstaller failed." }
 
 $PortableDirectory = Join-Path $Root "dist\ClipForgeAI"
+$UnexpectedIcuDlls = @(Get-ChildItem -LiteralPath $PortableDirectory -Filter "icu*.dll" -File -Recurse)
+if ($UnexpectedIcuDlls.Count -gt 0) {
+    $UnexpectedNames = ($UnexpectedIcuDlls | ForEach-Object { $_.FullName }) -join ", "
+    throw "PyInstaller bundled ICU DLLs from the build host. These can shadow the Windows ICU required by Qt: $UnexpectedNames"
+}
 $PackagedToolsDirectory = Join-Path $PortableDirectory "_internal\tools"
 if (-not (Test-Path -LiteralPath $PackagedToolsDirectory -PathType Container)) {
     # PyInstaller 6.12+ stores one-folder payload files in _internal. Older 6.x

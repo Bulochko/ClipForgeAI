@@ -28,11 +28,11 @@ The project provides a Windows x64 build pipeline:
    .\build\build_windows.ps1
    ```
 
-The script downloads a pinned Windows x64 shared FFmpeg build from [FFmpeg-Builds](https://github.com/FFmpeg-Builds/FFmpeg-Builds), verifies its SHA-256, and checks the executable architecture, `-version`, `-buildconf`, and reported license before bundling. It refuses builds with `--enable-gpl` or `--enable-nonfree`, requires the expected LGPL-3.0-or-later license and the `mpeg4` encoder, and stages the shared DLLs alongside FFmpeg for PyInstaller. The portable distribution includes the corresponding LGPL text and generated `THIRD_PARTY_NOTICES.txt`.
+The script downloads a pinned Windows x64 shared FFmpeg build from [FFmpeg-Builds](https://github.com/FFmpeg-Builds/FFmpeg-Builds), verifies its SHA-256 (including any cached archive used when offline), and checks the executable architecture, `-version`, `-buildconf`, and reported license before bundling. It refuses builds with `--enable-gpl` or `--enable-nonfree`, requires the expected LGPL-3.0-or-later license and the `mpeg4` encoder, and stages the shared DLLs alongside FFmpeg for PyInstaller. The official LGPL text is checked in at `licenses/COPYING.LGPLv3`, hash-verified during the build, and included in the portable distribution with generated `THIRD_PARTY_NOTICES.txt`.
 
 To upgrade FFmpeg, update the pinned release tag, archive URL, and SHA-256 together in `build/build_windows.ps1`. Keep the LGPL shared variant and verify the new binary's license and configuration; the build intentionally fails if any check disagrees.
 
-After FFmpeg validation, the script installs build dependencies into `.venv-build`, checks dependencies, creates the PyInstaller folder and compiles the installer when Inno Setup is available. It also runs the packaged FFmpeg/FFprobe checks against the portable output before compiling the installer.
+After FFmpeg validation, the script installs build dependencies into `.venv-build`, checks dependencies, and creates the PyInstaller folder. PyInstaller's DLL search is isolated from unrelated host tools so incompatible Qt/ICU libraries cannot leak into the package. The build validates packaged FFmpeg/FFprobe and rejects bundled host ICU DLLs before compiling the installer when Inno Setup is available. GitHub Actions also fails the smoke test if startup displays an exception dialog.
 
 ### Build with GitHub Actions
 
@@ -47,6 +47,8 @@ AI model weights are intentionally excluded from both distributions.
 3. Open the AI Analyzer. The selected Whisper model is downloaded on first use.
 
 The app includes the faster-whisper runtime in the full build. CUDA acceleration depends on compatible NVIDIA driver/CUDA/cuDNN runtime libraries; if unavailable, the transcription engine falls back to CPU INT8. Ollama is optional; without it, the app uses a basic speech-window heuristic.
+
+The default workspace is `%USERPROFILE%\Videos\ClipForge AI`. If Windows denies access to that folder, the app creates its Projects and Exports folders under `%LOCALAPPDATA%\ClipForge AI` instead.
 
 ## Technical requirements
 

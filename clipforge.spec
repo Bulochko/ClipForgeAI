@@ -26,6 +26,19 @@ a = Analysis([str(APP / "main.py")], pathex=[str(APP), str(ROOT)],
     binaries=binaries, datas=datas, hiddenimports=hiddenimports,
     hookspath=[], hooksconfig={}, runtime_hooks=[],
     excludes=["tkinter", "unittest", "pytest", "IPython", "notebook"], noarchive=False)
+
+# PyInstaller resolves native imports using PATH. A host tool such as Poppler
+# can expose an incompatible ICU DLL (for example ICU 78 exports suffixed
+# symbols, while the Qt wheel imports the Windows ICU compatibility names).
+# PySide6 works with the system ICU on supported Windows versions, so never
+# ship an unrelated ICU runtime from the build host.
+def is_icu_runtime(entry):
+    name = Path(str(entry[0])).name.lower()
+    return name.startswith("icu") and name.endswith(".dll")
+
+a.binaries = [entry for entry in a.binaries if not is_icu_runtime(entry)]
+a.datas = [entry for entry in a.datas if not is_icu_runtime(entry)]
+
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ClipForge AI",
     debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
