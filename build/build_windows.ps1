@@ -8,7 +8,7 @@ $PythonArgs = @()
 if ([System.IO.Path]::GetFileNameWithoutExtension($Python) -eq "py") { $PythonArgs = @("-3.11") }
 & $Python @PythonArgs -c "import sys; assert sys.version_info[:2] == (3,11), sys.version"
 if ($LASTEXITCODE -ne 0) { throw "Python 3.11 is required." }
-if (-not $SkipClean) { Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue }
+if (-not $SkipClean) { Remove-Item -Recurse -Force .build-temp, dist -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force tools | Out-Null
 $FfmpegZip = Join-Path $env:TEMP "clipforge-ffmpeg-lgpl.zip"
 $FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-lgpl.zip"
@@ -40,9 +40,10 @@ $VenvPython = Join-Path $Root ".venv-build\Scripts\python.exe"
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r requirements-build.txt
 if ($LASTEXITCODE -ne 0) { throw "Build dependency installation failed." }
+$env:PATH = "$(Join-Path $Root 'tools');$env:PATH"
 & $VenvPython build\check_dependencies.py
 if ($LASTEXITCODE -ne 0) { throw "Dependency check failed." }
-& $VenvPython -m PyInstaller --noconfirm --clean clipforge.spec
+& $VenvPython -m PyInstaller --noconfirm --clean --workpath .build-temp clipforge.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 Copy-Item README.md, AI_MODELS.md, THIRD_PARTY_NOTICES.txt, INSTALL_AI.bat -Destination dist\ClipForgeAI\ -Force
 Write-Host "Portable folder created: dist\ClipForgeAI" -ForegroundColor Green
