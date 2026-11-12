@@ -4,7 +4,11 @@ Local Windows desktop application for AI-assisted video clipping and vertical vi
 
 ## Current status
 
-**Development build — not yet production-validated.** The current application can load a video, inspect it with FFprobe, render a selected time range through FFmpeg, and run transcript-based AI clip suggestions when optional AI components are installed. It is not yet a full nonlinear editor; scene understanding, subtitles, face tracking, batch editing and a full timeline remain future work.
+**Alpha build — not yet production-validated.** The current application can load a local video, inspect it with FFprobe, render a selected time range through FFmpeg, add a visible commentary card, save a YouTube source reference with the export, and run transcript-based AI clip suggestions when optional AI components are installed. It is not yet a full nonlinear editor; scene understanding, automatic subtitles, face tracking, batch editing and a full timeline remain future work.
+
+### Source links and visible commentary
+
+The **Источник и стиль** tab accepts standard HTTPS YouTube watch, Shorts, live, embed, and `youtu.be` links. ClipForge saves the normalized link and the visible commentary text in a JSON sidecar next to the exported MP4. It does not download or extract a YouTube media stream; choose the corresponding local file on the Overview tab, using a copy you created or are authorized to process. A visible commentary card is burned into the rendered clip when commentary text is entered. The card and source credit do not grant rights to the underlying footage or make an unauthorized video original.
 
 ## Windows distribution
 
@@ -71,3 +75,5 @@ The default workspace is `%USERPROFILE%\Videos\ClipForge AI`. If Windows denies 
 ## Legal / media use
 
 FFmpeg is bundled from the LGPL build variant. Build details and notices are generated into `THIRD_PARTY_NOTICES.txt`. Always verify the exact binary's license/build configuration before redistributing. Only process video that you own or are authorized to use.
+
+YouTube source links in ClipForge are references only. The app does not download videos from YouTube. Keep the adjacent JSON export metadata with the MP4 if you need to retain the source URL and commentary text.

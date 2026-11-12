@@ -1,15 +1,16 @@
 from __future__ import annotations
-import json, os, shutil, subprocess, sys, uuid
+import json, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
 from datetime import datetime
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont
+from urllib.parse import parse_qs, urlparse
+from PySide6.QtCore import Qt, QThread, Signal, QUrl
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QDesktopServices, QImage, QPainter, QRect
 from ai_engine import run_analysis
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFileDialog, QListWidget, QListWidgetItem, QFrame, QLineEdit,
     QDoubleSpinBox, QComboBox, QProgressBar, QMessageBox, QSplitter, QTableWidget,
-    QTableWidgetItem, QHeaderView, QTabWidget, QTextEdit, QAbstractItemView
+    QTableWidgetItem, QHeaderView, QTabWidget, QTextEdit, QAbstractItemView, QCheckBox
 )
 
 APP_NAME = "ClipForge AI"
@@ -19,10 +20,9 @@ def prepare_workspace() -> tuple[Path, Path, Path]:
     preferred = Path.home() / "Videos" / "ClipForge AI"
     local_app_data = os.environ.get("LOCALAPPDATA")
     fallback_base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
-    candidates = (preferred, fallback_base / "ClipForge AI")
     errors = []
 
-    for root in candidates:
+    for root in (preferred, fallback_base / "ClipForge AI"):
         projects = root / "Projects"
         exports = root / "Exports"
         try:
@@ -37,6 +37,68 @@ def prepare_workspace() -> tuple[Path, Path, Path]:
 
 
 ROOT, PROJECTS, EXPORTS = prepare_workspace()
+
+
+def youtube_video_id(url: str) -> str:
+    parsed = urlparse(url.strip())
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or host not in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}:
+        raise ValueError("ĞŸĞ¾Ğ´Ğ´ĞµÑ€Ğ¶Ğ¸Ğ²Ğ°ÑÑ‚ÑÑ HTTPS-ÑÑÑ‹Ğ»ĞºĞ¸ YouTube: youtube.com Ğ¸ youtu.be.")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Ğ’ ÑÑÑ‹Ğ»ĞºĞµ ÑƒĞºĞ°Ğ·Ğ°Ğ½ Ğ½ĞµĞºĞ¾Ñ€Ñ€ĞµĞºÑ‚Ğ½Ñ‹Ğ¹ Ğ¿Ğ¾Ñ€Ñ‚.") from exc
+    if port not in (None, 443) or parsed.username or parsed.password:
+        raise ValueError("Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹ Ğ¾Ğ±Ñ‹Ñ‡Ğ½ÑƒÑ HTTPS-ÑÑÑ‹Ğ»ĞºÑƒ YouTube Ğ±ĞµĞ· ÑƒÑ‡Ñ‘Ñ‚Ğ½Ñ‹Ñ… Ğ´Ğ°Ğ½Ğ½Ñ‹Ñ… Ğ¸ Ğ½ĞµÑÑ‚Ğ°Ğ½Ğ´Ğ°Ñ€Ñ‚Ğ½Ğ¾Ğ³Ğ¾ Ğ¿Ğ¾Ñ€Ñ‚Ğ°.")
+
+    parts = [part for part in parsed.path.split("/") if part]
+    video_id = None
+    if host == "youtu.be":
+        video_id = parts[0] if parts else None
+    elif parsed.path == "/watch":
+        video_id = parse_qs(parsed.query).get("v", [None])[0]
+    elif len(parts) >= 2 and parts[0] in {"shorts", "embed", "live"}:
+        video_id = parts[1]
+
+    if not video_id or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        raise ValueError("ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ñ€Ğ°ÑĞ¿Ğ¾Ğ·Ğ½Ğ°Ñ‚ÑŒ ID YouTube-Ğ²Ğ¸Ğ´ĞµĞ¾ Ğ² ÑÑ‚Ğ¾Ğ¹ ÑÑÑ‹Ğ»ĞºĞµ.")
+    return video_id
+
+
+def create_commentary_overlay(text: str, ratio: str, output_path: Path) -> None:
+    dimensions = {"9:16": (1080, 1920), "1:1": (1080, 1080), "16:9": (1920, 1080)}
+    width, height = dimensions[ratio]
+    image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+    image.fill(Qt.transparent)
+
+    padding = max(28, int(min(width, height) * 0.04))
+    inner_width = width - padding * 4
+    header_font = QFont("Segoe UI", max(17, int(min(width, height) * 0.023)), QFont.DemiBold)
+    body_font = QFont("Segoe UI", max(26, int(min(width, height) * 0.038)), QFont.DemiBold)
+    header_height = max(28, int(min(width, height) * 0.035))
+    line_gap = max(8, int(min(width, height) * 0.012))
+    text_area = QRect(0, 0, inner_width, int(height * 0.28))
+    text_bounds = QFontMetrics(body_font).boundingRect(text_area, Qt.TextWordWrap, text)
+    body_height = min(max(text_bounds.height(), body_font.pixelSize()), int(height * 0.28))
+    panel_height = padding * 2 + header_height + line_gap + body_height
+    panel = QRect(padding, padding, width - padding * 2, panel_height)
+
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(17, 19, 24, 220))
+    painter.drawRoundedRect(panel, max(16, padding // 2), max(16, padding // 2))
+    painter.setPen(QColor(178, 165, 255))
+    painter.setFont(header_font)
+    painter.drawText(QRect(panel.x() + padding, panel.y() + padding // 2, inner_width, header_height), Qt.AlignLeft | Qt.AlignVCenter, "ĞœĞĞ™ ĞšĞĞœĞœĞ•ĞĞ¢ĞĞ Ğ˜Ğ™")
+    painter.setPen(QColor(255, 255, 255))
+    painter.setFont(body_font)
+    body_rect = QRect(panel.x() + padding, panel.y() + padding // 2 + header_height + line_gap, inner_width, body_height)
+    painter.drawText(body_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignVCenter, text)
+    painter.end()
+
+    if not image.save(str(output_path), "PNG"):
+        raise RuntimeError("ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ¿Ğ¾Ğ´Ğ³Ğ¾Ñ‚Ğ¾Ğ²Ğ¸Ñ‚ÑŒ Ğ²Ğ¸Ğ´Ğ¸Ğ¼Ñ‹Ğ¹ ÑĞ»Ğ¾Ğ¹ ĞºĞ¾Ğ¼Ğ¼ĞµĞ½Ñ‚Ğ°Ñ€Ğ¸Ñ Ğ´Ğ»Ñ ĞºĞ»Ğ¸Ğ¿Ğ°.")
 
 
 def find_bin(name: str) -> str | None:
@@ -61,8 +123,8 @@ class RenderWorker(QThread):
     done = Signal(str)
     failed = Signal(str)
     progress = Signal(int)
-    def __init__(self, source: str, start: float, end: float, output: str, ratio: str):
-        super().__init__(); self.source=source; self.start_at=start; self.end_at=end; self.output=output; self.ratio=ratio
+    def __init__(self, source: str, start: float, end: float, output: str, ratio: str, overlay_path: str | None = None):
+        super().__init__(); self.source=source; self.start_at=start; self.end_at=end; self.output=output; self.ratio=ratio; self.overlay_path=overlay_path
     def run(self):
         ffmpeg = find_bin("ffmpeg")
         if not ffmpeg: self.failed.emit("ĞĞµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½ ffmpeg. Ğ£ÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ¸ FFmpeg Ğ¸ Ğ´Ğ¾Ğ±Ğ°Ğ²ÑŒ Ğ¿Ğ°Ğ¿ĞºÑƒ bin Ğ² PATH."); return
@@ -80,7 +142,11 @@ class RenderWorker(QThread):
             video_codec = ["-c:v", "libopenh264", "-b:v", "6M"]
         else:
             video_codec = ["-c:v", "mpeg4", "-q:v", "3"]
-        cmd=[ffmpeg,"-y","-ss",str(self.start_at),"-i",self.source,"-t",str(self.end_at-self.start_at),"-vf",filt,*video_codec,"-c:a","aac","-b:a","192k","-movflags","+faststart",self.output]
+        if self.overlay_path:
+            filter_complex=f"[0:v]{filt}[base];[1:v]format=rgba[commentary];[base][commentary]overlay=0:0:shortest=1:format=auto[v]"
+            cmd=[ffmpeg,"-y","-ss",str(self.start_at),"-i",self.source,"-loop","1","-i",self.overlay_path,"-t",str(self.end_at-self.start_at),"-filter_complex",filter_complex,"-map","[v]","-map","0:a?","-shortest",*video_codec,"-c:a","aac","-b:a","192k","-movflags","+faststart",self.output]
+        else:
+            cmd=[ffmpeg,"-y","-ss",str(self.start_at),"-i",self.source,"-t",str(self.end_at-self.start_at),"-vf",filt,*video_codec,"-c:a","aac","-b:a","192k","-movflags","+faststart",self.output]
         p=subprocess.run(cmd, capture_output=True, text=True)
         if p.returncode: self.failed.emit(p.stderr[-1800:] or "ĞÑˆĞ¸Ğ±ĞºĞ° FFmpeg")
         else: self.done.emit(self.output)
@@ -103,6 +169,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle(APP_NAME); self.resize(1180, 760); self.setMinimumSize(900, 620)
         self.current_video=None; self.video_info=None; self.worker=None; self.ai_worker=None; self.ai_clips=[]; self.transcript_segments=[]
+        self.source_url=None; self.pending_export_metadata={}; self.pending_overlay_paths={}
         self.setStyleSheet("""
         QWidget { background:#111318; color:#e9edf5; font-family:'Segoe UI'; font-size:10pt; }
         QFrame#Panel { background:#191d25; border:1px solid #2a303b; border-radius:12px; }
@@ -143,8 +210,17 @@ class MainWindow(QMainWindow):
         self.ai_status=QLabel("ĞĞ¶Ğ¸Ğ´Ğ°Ğ½Ğ¸Ğµ Ğ²Ğ¸Ğ´ĞµĞ¾. ĞĞ½Ğ°Ğ»Ğ¸Ğ· Ğ²Ñ‹Ğ¿Ğ¾Ğ»Ğ½ÑĞµÑ‚ÑÑ Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾."); self.ai_status.setObjectName("Muted"); av.addWidget(self.ai_status)
         self.ai_table=QTableWidget(0,5); self.ai_table.setHorizontalHeaderLabels(["ĞÑ†ĞµĞ½ĞºĞ°","ĞĞ°Ğ·Ğ²Ğ°Ğ½Ğ¸Ğµ","ĞĞ°Ñ‡Ğ°Ğ»Ğ¾","ĞšĞ¾Ğ½ĞµÑ†","ĞŸĞ¾Ñ‡ĞµĞ¼Ñƒ Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½Ğ¾"]); self.ai_table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeToContents); self.ai_table.horizontalHeader().setSectionResizeMode(4,QHeaderView.Stretch); self.ai_table.setSelectionBehavior(QAbstractItemView.SelectRows); self.ai_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.ai_table.cellDoubleClicked.connect(self.select_ai_clip); av.addWidget(self.ai_table)
         ai_actions=QHBoxLayout(); self.use_clip_btn=QPushButton("Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ñ‚ÑŒ Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½Ğ½Ñ‹Ğ¹ Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚"); self.use_clip_btn.clicked.connect(self.use_selected_ai_clip); ai_actions.addWidget(self.use_clip_btn); ai_actions.addStretch(); av.addLayout(ai_actions); av.addStretch(); tabs.addTab(ai,"AI Analyzer")
+        source_tab=QWidget(); source_layout=QVBoxLayout(source_tab); source_layout.setContentsMargins(14,14,14,14); source_layout.setSpacing(12)
+        source_panel, source_box=self.panel(); source_box.addWidget(QLabel("Ğ¡Ğ¡Ğ«Ğ›ĞšĞ ĞĞ Ğ˜Ğ¡Ğ¥ĞĞ”ĞĞ˜Ğš")); source_box.addWidget(QLabel("Ğ’ÑÑ‚Ğ°Ğ²ÑŒ HTTPS-ÑÑÑ‹Ğ»ĞºÑƒ Ğ½Ğ° YouTube. ĞĞ½Ğ° ÑĞ¾Ñ…Ñ€Ğ°Ğ½Ğ¸Ñ‚ÑÑ Ñ€ÑĞ´Ğ¾Ğ¼ Ñ ÑĞºÑĞ¿Ğ¾Ñ€Ñ‚Ğ¾Ğ¼ ĞºĞ°Ğº Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº; Ğ²Ğ¸Ğ´ĞµĞ¾ Ñ YouTube Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ğµ Ğ½Ğµ ÑĞºĞ°Ñ‡Ğ¸Ğ²Ğ°ĞµÑ‚."))
+        self.source_url_edit=QLineEdit(); self.source_url_edit.setPlaceholderText("https://www.youtube.com/watch?v=â€¦"); source_box.addWidget(self.source_url_edit)
+        source_actions=QHBoxLayout(); self.attach_source_btn=QPushButton("ĞŸÑ€Ğ¸Ğ²ÑĞ·Ğ°Ñ‚ÑŒ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº"); self.attach_source_btn.clicked.connect(self.attach_source); source_actions.addWidget(self.attach_source_btn); self.open_source_btn=QPushButton("ĞÑ‚ĞºÑ€Ñ‹Ñ‚ÑŒ Ğ²Ğ¸Ğ´ĞµĞ¾ Ğ½Ğ° YouTube"); self.open_source_btn.setEnabled(False); self.open_source_btn.clicked.connect(self.open_source); source_actions.addWidget(self.open_source_btn); source_actions.addStretch(); source_box.addLayout(source_actions)
+        self.source_status=QLabel("Ğ§Ñ‚Ğ¾Ğ±Ñ‹ Ğ¼Ğ¾Ğ½Ñ‚Ğ¸Ñ€Ğ¾Ğ²Ğ°Ñ‚ÑŒ Ğ²Ğ¸Ğ´ĞµĞ¾, Ğ´Ğ¾Ğ±Ğ°Ğ²ÑŒ ĞµĞ³Ğ¾ Ñ„Ğ°Ğ¹Ğ» Ğ½Ğ° Ğ²ĞºĞ»Ğ°Ğ´ĞºĞµ Â«ĞĞ±Ğ·Ğ¾Ñ€Â». Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹ Ñ„Ğ°Ğ¹Ğ», ĞºĞ¾Ñ‚Ğ¾Ñ€Ñ‹Ğ¹ Ñ‚Ñ‹ ÑĞ¾Ğ·Ğ´Ğ°Ğ» Ğ¸Ğ»Ğ¸ Ğ¸Ğ¼ĞµĞµÑˆÑŒ Ğ¿Ñ€Ğ°Ğ²Ğ¾ Ğ¾Ğ±Ñ€Ğ°Ğ±Ğ°Ñ‚Ñ‹Ğ²Ğ°Ñ‚ÑŒ."); self.source_status.setObjectName("Muted"); self.source_status.setWordWrap(True); source_box.addWidget(self.source_status)
+        self.rights_confirmation=QCheckBox("ĞŸĞ¾Ğ´Ñ‚Ğ²ĞµÑ€Ğ¶Ğ´Ğ°Ñ, Ñ‡Ñ‚Ğ¾ ÑĞ¾Ğ·Ğ´Ğ°Ğ» ÑÑ‚Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾ Ğ¸Ğ»Ğ¸ Ğ¸Ğ¼ĞµÑ Ñ€Ğ°Ğ·Ñ€ĞµÑˆĞµĞ½Ğ¸Ğµ Ğ½Ğ° ĞµĞ³Ğ¾ Ğ¾Ğ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºÑƒ"); source_box.addWidget(self.rights_confirmation); source_layout.addWidget(source_panel)
+        commentary_panel, commentary_box=self.panel(); commentary_box.addWidget(QLabel("Ğ’Ğ˜Ğ”Ğ˜ĞœĞ«Ğ™ ĞĞ’Ğ¢ĞĞ Ğ¡ĞšĞ˜Ğ™ ĞšĞĞœĞœĞ•ĞĞ¢ĞĞ Ğ˜Ğ™")); commentary_box.addWidget(QLabel("ĞĞµĞ¾Ğ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ñ‹Ğ¹ Ñ‚ĞµĞºÑÑ‚ Ğ±ÑƒĞ´ĞµÑ‚ Ğ²Ğ¸Ğ´ĞµĞ½ Ğ¿Ğ¾Ğ²ĞµÑ€Ñ… ĞºĞ»Ğ¸Ğ¿Ğ°. ĞĞ½ Ñ‚Ğ°ĞºĞ¶Ğµ ÑĞ¾Ñ…Ñ€Ğ°Ğ½Ğ¸Ñ‚ÑÑ Ğ² Ğ¼ĞµÑ‚Ğ°Ğ´Ğ°Ğ½Ğ½Ñ‹Ñ… ÑĞºÑĞ¿Ğ¾Ñ€Ñ‚Ğ°."))
+        self.commentary_edit=QTextEdit(); self.commentary_edit.setPlaceholderText("Ğ”Ğ¾Ğ±Ğ°Ğ²ÑŒ ÑĞ¾Ğ±ÑÑ‚Ğ²ĞµĞ½Ğ½Ğ¾Ğµ Ğ¿Ğ¾ÑÑĞ½ĞµĞ½Ğ¸Ğµ Ğ¸Ğ»Ğ¸ ĞºĞ¾Ğ½Ñ‚ĞµĞºÑÑ‚ Ğº ÑÑ‚Ğ¾Ğ¼Ñƒ Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚Ñƒâ€¦"); self.commentary_edit.setMaximumHeight(120); commentary_box.addWidget(self.commentary_edit)
+        commentary_box.addWidget(QLabel("Ğ¢ĞµĞºÑÑ‚Ğ¾Ğ²Ğ¾Ğµ Ğ¾Ñ„Ğ¾Ñ€Ğ¼Ğ»ĞµĞ½Ğ¸Ğµ Ğ½Ğµ Ğ·Ğ°Ğ¼ĞµĞ½ÑĞµÑ‚ Ñ€Ğ°Ğ·Ñ€ĞµÑˆĞµĞ½Ğ¸Ğµ Ğ½Ğ° Ğ¸ÑĞ¿Ğ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ğ½Ğ¸Ğµ Ğ¸ÑÑ…Ğ¾Ğ´Ğ½Ğ¾Ğ³Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾.")); source_layout.addWidget(commentary_panel); source_layout.addStretch(); tabs.addTab(source_tab,"Ğ˜ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº Ğ¸ ÑÑ‚Ğ¸Ğ»ÑŒ")
         settings=QWidget(); sv=QVBoxLayout(settings); sv.addWidget(QLabel("Ğ›Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ğµ Ğ½Ğ°ÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ¸")); sv.addWidget(QLabel(f"Ğ Ğ°Ğ±Ğ¾Ñ‡Ğ°Ñ Ğ¿Ğ°Ğ¿ĞºĞ°: {ROOT}")); sv.addWidget(QLabel("FFmpeg Ğ¸ FFprobe Ğ´Ğ¾Ğ»Ğ¶Ğ½Ñ‹ Ğ±Ñ‹Ñ‚ÑŒ Ğ´Ğ¾ÑÑ‚ÑƒĞ¿Ğ½Ñ‹ Ñ‡ĞµÑ€ĞµĞ· PATH Ğ¸Ğ»Ğ¸ Ğ»ĞµĞ¶Ğ°Ñ‚ÑŒ Ğ² Ğ¿Ğ°Ğ¿ĞºĞµ tools Ñ€ÑĞ´Ğ¾Ğ¼ Ñ Ğ¿Ñ€Ğ¾Ğ³Ñ€Ğ°Ğ¼Ğ¼Ğ¾Ğ¹.")); sv.addStretch(); tabs.addTab(settings,"ĞĞ°ÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ¸")
-        foot=QLabel("CLIPFORGE AI  â€¢  WINDOWS FULL BUILD  â€¢  0.3.0"); foot.setObjectName("Muted"); main.addWidget(foot)
+        foot=QLabel("CLIPFORGE AI  â€¢  WINDOWS FULL BUILD  â€¢  ALPHA 0.3.0"); foot.setObjectName("Muted"); main.addWidget(foot)
 
     def check_ffmpeg(self):
         ok=find_bin("ffmpeg") and find_bin("ffprobe")
@@ -160,19 +236,66 @@ class MainWindow(QMainWindow):
         self.meta.setText(f"{info['width']} Ã— {info['height']} px  â€¢  {self.fmt(info['duration'])}  â€¢  {info['codec']}  â€¢  {Path(path).stat().st_size/1024/1024:.1f} MB")
         self.start_spin.setValue(0); self.end_spin.setValue(min(30,info['duration']))
 
+    def attach_source(self):
+        try:
+            video_id=youtube_video_id(self.source_url_edit.text())
+        except ValueError as exc:
+            self.source_url=None; self.open_source_btn.setEnabled(False); self.source_status.setText(str(exc)); return
+        self.source_url=f"https://www.youtube.com/watch?v={video_id}"
+        self.source_url_edit.setText(self.source_url); self.open_source_btn.setEnabled(True)
+        self.source_status.setText(f"Ğ˜ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº Ğ¿Ñ€Ğ¸Ğ²ÑĞ·Ğ°Ğ½: YouTube Â· {video_id}. Ğ”Ğ»Ñ Ğ¼Ğ¾Ğ½Ñ‚Ğ°Ğ¶Ğ° Ğ¾Ñ‚Ğ´ĞµĞ»ÑŒĞ½Ğ¾ Ğ²Ñ‹Ğ±ĞµÑ€Ğ¸ Ñ€Ğ°Ğ·Ñ€ĞµÑˆÑ‘Ğ½Ğ½Ñ‹Ğ¹ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ» Ğ½Ğ° Ğ²ĞºĞ»Ğ°Ğ´ĞºĞµ Â«ĞĞ±Ğ·Ğ¾Ñ€Â».")
+
+    def open_source(self):
+        try:
+            video_id=youtube_video_id(self.source_url_edit.text())
+        except ValueError as exc:
+            QMessageBox.warning(self,"Ğ¡ÑÑ‹Ğ»ĞºĞ° YouTube",str(exc)); return
+        self.source_url=f"https://www.youtube.com/watch?v={video_id}"
+        self.source_url_edit.setText(self.source_url)
+        QDesktopServices.openUrl(QUrl(self.source_url))
+
     @staticmethod
     def fmt(seconds):
         s=int(seconds); return f"{s//3600:02}:{(s%3600)//60:02}:{s%60:02}"
 
     def render_clip(self):
         if not self.current_video: QMessageBox.information(self,"ĞÑƒĞ¶Ğ½Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾","Ğ¡Ğ½Ğ°Ñ‡Ğ°Ğ»Ğ° Ğ´Ğ¾Ğ±Ğ°Ğ²ÑŒ Ğ¸ÑÑ…Ğ¾Ğ´Ğ½Ğ¾Ğµ Ğ²Ğ¸Ğ´ĞµĞ¾."); return
+        source_url=None
+        if self.source_url_edit.text().strip():
+            try:
+                video_id=youtube_video_id(self.source_url_edit.text())
+                source_url=f"https://www.youtube.com/watch?v={video_id}"
+            except ValueError as exc:
+                QMessageBox.warning(self,"ĞŸÑ€Ğ¾Ğ²ĞµÑ€ÑŒ ÑÑÑ‹Ğ»ĞºÑƒ Ğ½Ğ° Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº",str(exc)); return
+            if not self.rights_confirmation.isChecked():
+                QMessageBox.warning(self,"ĞŸĞ¾Ğ´Ñ‚Ğ²ĞµÑ€Ğ´Ğ¸ Ğ¿Ñ€Ğ°Ğ²Ğ°","ĞŸĞ¾Ğ´Ñ‚Ğ²ĞµÑ€Ğ´Ğ¸, Ñ‡Ñ‚Ğ¾ ÑĞ¾Ğ·Ğ´Ğ°Ğ» Ğ¸ÑÑ…Ğ¾Ğ´Ğ½Ğ¾Ğµ Ğ²Ğ¸Ğ´ĞµĞ¾ Ğ¸Ğ»Ğ¸ Ğ¸Ğ¼ĞµĞµÑˆÑŒ Ñ€Ğ°Ğ·Ñ€ĞµÑˆĞµĞ½Ğ¸Ğµ Ğ½Ğ° ĞµĞ³Ğ¾ Ğ¾Ğ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºÑƒ."); return
         start=self.start_spin.value(); end=self.end_spin.value()
         if end<=start: QMessageBox.warning(self,"ĞŸÑ€Ğ¾Ğ²ĞµÑ€ÑŒ Ñ‚Ğ°Ğ¹Ğ¼ĞºĞ¾Ğ´","Ğ’Ñ€ĞµĞ¼Ñ Ğ¾ĞºĞ¾Ğ½Ñ‡Ğ°Ğ½Ğ¸Ñ Ğ´Ğ¾Ğ»Ğ¶Ğ½Ğ¾ Ğ±Ñ‹Ñ‚ÑŒ Ğ±Ğ¾Ğ»ÑŒÑˆĞµ Ğ²Ñ€ĞµĞ¼ĞµĞ½Ğ¸ Ğ½Ğ°Ñ‡Ğ°Ğ»Ğ°."); return
         if self.video_info and end>self.video_info['duration']+0.1: QMessageBox.warning(self,"ĞŸÑ€Ğ¾Ğ²ĞµÑ€ÑŒ Ñ‚Ğ°Ğ¹Ğ¼ĞºĞ¾Ğ´","ĞšĞ¾Ğ½ĞµÑ† Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚Ğ° Ğ²Ñ‹Ñ…Ğ¾Ğ´Ğ¸Ñ‚ Ğ·Ğ° Ğ´Ğ»Ğ¸Ñ‚ĞµĞ»ÑŒĞ½Ğ¾ÑÑ‚ÑŒ Ğ¸ÑÑ…Ğ¾Ğ´Ğ½Ğ¾Ğ³Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾."); return
         ratio="9:16" if self.ratio.currentIndex()==0 else ("1:1" if self.ratio.currentIndex()==1 else "16:9")
         stamp=datetime.now().strftime("%Y%m%d_%H%M%S"); output=str(EXPORTS/f"clip_{stamp}_{uuid.uuid4().hex[:4]}.mp4")
+        commentary=self.commentary_edit.toPlainText().strip()
+        if len(commentary)>180:
+            QMessageBox.warning(self,"Ğ¡Ğ»Ğ¸ÑˆĞºĞ¾Ğ¼ Ğ´Ğ»Ğ¸Ğ½Ğ½Ñ‹Ğ¹ Ñ‚ĞµĞºÑÑ‚","ĞšĞ¾Ğ¼Ğ¼ĞµĞ½Ñ‚Ğ°Ñ€Ğ¸Ğ¹ Ğ´Ğ¾Ğ»Ğ¶ĞµĞ½ Ğ±Ñ‹Ñ‚ÑŒ Ğ½Ğµ Ğ´Ğ»Ğ¸Ğ½Ğ½ĞµĞµ 180 ÑĞ¸Ğ¼Ğ²Ğ¾Ğ»Ğ¾Ğ²."); return
+        overlay_path=None
+        if commentary:
+            overlay_path=str(PROJECTS/f"commentary_{uuid.uuid4().hex}.png")
+            try:
+                create_commentary_overlay(commentary,ratio,Path(overlay_path))
+            except Exception as exc:
+                QMessageBox.critical(self,"ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ¿Ğ¾Ğ´Ğ³Ğ¾Ñ‚Ğ¾Ğ²Ğ¸Ñ‚ÑŒ Ğ¾Ñ„Ğ¾Ñ€Ğ¼Ğ»ĞµĞ½Ğ¸Ğµ",str(exc)); return
+        self.pending_export_metadata[output]={
+            "created_at":datetime.now().astimezone().isoformat(timespec="seconds"),
+            "source_file":Path(self.current_video).name,
+            "source_url":source_url,
+            "clip_start_seconds":start,
+            "clip_end_seconds":end,
+            "aspect_ratio":ratio,
+            "author_commentary":commentary,
+        }
+        if overlay_path: self.pending_overlay_paths[output]=overlay_path
         self.render_btn.setEnabled(False); self.progress.show()
-        self.worker=RenderWorker(self.current_video,start,end,output,ratio); self.worker.done.connect(self.render_done); self.worker.failed.connect(self.render_failed); self.worker.start()
+        self.worker=RenderWorker(self.current_video,start,end,output,ratio,overlay_path); self.worker.done.connect(self.render_done); self.worker.failed.connect(self.render_failed); self.worker.start()
 
     def start_ai_analysis(self):
         if not self.current_video or not self.video_info:
@@ -188,4 +311,53 @@ class MainWindow(QMainWindow):
         self.ai_status.setText(f"Ğ“Ğ¾Ñ‚Ğ¾Ğ²Ğ¾: Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ğ¾ {len(clips)} Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚Ğ¾Ğ²; Ñ€Ğ°ÑĞ¿Ğ¾Ğ·Ğ½Ğ°Ğ½Ğ¾ ÑĞµĞ³Ğ¼ĞµĞ½Ñ‚Ğ¾Ğ² Ñ€ĞµÑ‡Ğ¸: {len(segments)}. {info}")
         self.ai_table.setRowCount(len(clips))
         for i,c in enumerate(clips):
-            values=[str(c.get("score", "â€”")), c.get("title", c.get("reason", "AI clip")), self.fmt(c["start"]), self.fmt(c["enuëm¢G§²ÚîÆ­yÑ¥É•Ñ½Éä€‰™™µÁ•œ¹•á”ˆ(€€€€‘™ÁÉ½‰•A…Ñ €ô)½¥¸µA…Ñ €‘¥É•Ñ½Éä€‰™™ÁÉ½‰”¹•á”ˆ(€€€™½É•… € ‘A…Ñ ¥¸  ‘™µÁ•A…Ñ °€‘™ÁÉ½‰•A…Ñ ¤¤ì(€€€€€€€¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘A…Ñ €µA…Ñ¡QåÁ”1•…˜¤¤ì(€€€€€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°¥Ìµ¥ÍÍ¥¹œÉ•ÅÕ¥É••á•ÕÑ…‰±”è€‘A…Ñ ˆ(€€€€€€€ô(€€€ô((€€€™½É•… € ‘A…Ñ ¥¸  ‘™µÁ•A…Ñ °€‘™ÁÉ½‰•A…Ñ ¤¤ì(€€€€€€€€‘5…¡¥¹”€ô•ĞµA•5…¡¥¹”€µA…Ñ €‘A…Ñ (€€€€€€€¥˜€ ‘5…¡¥¹”€µ¹”€ÁààØØĞ¤ì(€€€€€€€€€€€€‘5…¡¥¹•!•à€ô€ˆÁáìÀé`Ñôˆ€µ˜€‘5…¡¥¹”(€€€€€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°½¹Ñ…¥¹Ì„¹½¸µàØĞ•á•ÕÑ…‰±”€ ‘5…¡¥¹•!•à¤è€‘A…Ñ ˆ(€€€€€€€ô(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°½¹Ñ…¥¹ÌàØĞµÁ•œ…¹ÁÉ½‰”•á•ÕÑ…‰±•Ì¸ˆ((€€€€‘Y•ÉÍ¥½¹=ÕÑÁÕĞ€ô%¹Ù½­”µ¡•­•‘9…Ñ¥Ù”€µá•ÕÑ…‰±”€‘™µÁ•A…Ñ €µÉÕµ•¹ÑÌ  ˆµÙ•ÉÍ¥½¸ˆ¤€µ•ÍÉ¥ÁÑ¥½¸€ˆ‘1…‰•°™™µÁ•œ€µÙ•ÉÍ¥½¸ˆ(€€€¥˜€ ‘Y•ÉÍ¥½¹=ÕÑÁÕĞ€µ¹½Ñµ…Ñ €ˆ ı´¥y™™µÁ•œÙ•ÉÍ¥½¸€ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°™™µÁ•œ€µÙ•ÉÍ¥½¸É•ÑÕÉ¹•ÍÕ•ÍÌ‰ÕĞ‘¥¹½Ğ¥‘•¹Ñ¥™äµÁ•œ¸ˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°€   ‘Y•ÉÍ¥½¹=ÕÑÁÕĞ¹QÉ¥´ ¤€µÍÁ±¥Ğ€‰Èı¸ˆ¥lÁt¤¤ˆ((€€€€‘™ÁÉ½‰•Y•ÉÍ¥½¸€ô%¹Ù½­”µ¡•­•‘9…Ñ¥Ù”€µá•ÕÑ…‰±”€‘™ÁÉ½‰•A…Ñ €µÉÕµ•¹ÑÌ  ˆµÙ•ÉÍ¥½¸ˆ¤€µ•ÍÉ¥ÁÑ¥½¸€ˆ‘1…‰•°™™ÁÉ½‰”€µÙ•ÉÍ¥½¸ˆ(€€€¥˜€ ‘™ÁÉ½‰•Y•ÉÍ¥½¸€µ¹½Ñµ…Ñ €ˆ ı´¥y™™ÁÉ½‰”Ù•ÉÍ¥½¸€ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°™™ÁÉ½‰”€µÙ•ÉÍ¥½¸É•ÑÕÉ¹•ÍÕ•ÍÌ‰ÕĞ‘¥¹½Ğ¥‘•¹Ñ¥™äÁÉ½‰”¸ˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°™™ÁÉ½‰”€µÙ•ÉÍ¥½¸½µÁ±•Ñ•ÍÕ•ÍÍ™Õ±±ä¸ˆ((€€€€‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€ô%¹Ù½­”µ¡•­•‘9…Ñ¥Ù”€µá•ÕÑ…‰±”€‘™µÁ•A…Ñ €µÉÕµ•¹ÑÌ  ˆµ‰Õ¥±‘½¹˜ˆ¤€µ•ÍÉ¥ÁÑ¥½¸€ˆ‘1…‰•°™™µÁ•œ€µ‰Õ¥±‘½¹˜ˆ(€€€¥˜€ ‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€µµ…Ñ €ˆ ı¤¤ üéyñqÌ¤´µ•¹…‰±”µÁ° üõqÍğ¤ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°µÁ•œ‰Õ¥±½¹™¥ÕÉ…Ñ¥½¸½¹Ñ…¥¹Ì€´µ•¹…‰±”µÁ°¸I•™ÕÍ¥¹œÑ¼‰Õ¹‘±”„A0‰Õ¥±¸ˆ(€€€ô(€€€¥˜€ ‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€µµ…Ñ €ˆ ı¤¤ üéyñqÌ¤´µ•¹…‰±”µ¹½¹™É•” üõqÍğ¤ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°µÁ•œ‰Õ¥±½¹™¥ÕÉ…Ñ¥½¸½¹Ñ…¥¹Ì€´µ•¹…‰±”µ¹½¹™É•”¸I•™ÕÍ¥¹œÑ¼‰Õ¹‘±”„¹½¹™É•”‰Õ¥±¸ˆ(€€€ô(€€€¥˜€ ‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€µ¹½Ñµ…Ñ €ˆ ı´¥yqÌ¨´µ…É õààÙ|ØÑqÌ¨ˆ€µ½È(€€€€€€€€‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€µ¹½Ñµ…Ñ €ˆ ı´¥yqÌ¨´µÑ…É•Ğµ½Ìõµ¥¹ÜÌÉqÌ¨ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°µÁ•œ‰Õ¥±½¹™¥ÕÉ…Ñ¥½¸‘½•Ì¹½Ğ¥‘•¹Ñ¥™ä]¥¹‘½İÌààÙ|ØĞ€¡µ¥¹ÜÌÈ¤¸ˆ(€€€ô(€€€¥˜€ ‘	Õ¥±‘½¹™¥ÕÉ…Ñ¥½¸€µ¹½Ñµ…Ñ €ˆ ı´¥yqÌ¨´µ•¹…‰±”µÙ•ÉÍ¥½¸ÍqÌ¨ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°µÁ•œ‰Õ¥±½¹™¥ÕÉ…Ñ¥½¸‘¥™™•ÉÌ™É½´Ñ¡”•áÁ•Ñ•1A0´Ì¸Àµ½Èµ±…Ñ•ÈÉ•±•…Í”¸ˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°‰Õ¥±½¹™¥ÕÉ…Ñ¥½¸¥Ì]¥¹‘½İÌàØĞ…¹¡…Ì¹¼€´µ•¹…‰±”µÁ°½È€´µ•¹…‰±”µ¹½¹™É•”¸ˆ((€€€€‘1¥•¹Í•=ÕÑÁÕĞ€ô%¹Ù½­”µ¡•­•‘9…Ñ¥Ù”€µá•ÕÑ…‰±”€‘™µÁ•A…Ñ €µÉÕµ•¹ÑÌ  ˆµ0ˆ¤€µ•ÍÉ¥ÁÑ¥½¸€ˆ‘1…‰•°™™µÁ•œ€µ0ˆ(€€€¥˜€ ‘1¥•¹Í•=ÕÑÁÕĞ€µ¹½Ñµ…Ñ €ˆ ı¥Ì¥9T1•ÍÍ•È•¹•É…°AÕ‰±¥Œ1¥•¹Í”¸¨ı•¥Ñ¡•ÈÙ•ÉÍ¥½¹qÌ¬ÍqÌ­½˜Ñ¡”1¥•¹Í”ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°±¥•¹Í”‘¥¹½Ğµ…Ñ •áÁ•Ñ•€‘™µÁ•1¥•¹Í”¸I•™ÕÍ¥¹œÑ¼‰Õ¹‘±”¥Ğ¸ˆ(€€€ô(€€€¥˜€ ‘1¥•¹Í•=ÕÑÁÕĞ€µµ…Ñ €‰9T•¹•É…°AÕ‰±¥Œ1¥•¹Í”ˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°É•Á½ÉÑÌÑ¡”A0¥¹ÍÑ•…½˜•áÁ•Ñ•€‘™µÁ•1¥•¹Í”¸I•™ÕÍ¥¹œÑ¼‰Õ¹‘±”¥Ğ¸ˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°É•Á½ÉÑÌÑ¡”•áÁ•Ñ•€‘™µÁ•1¥•¹Í”±¥•¹Í”¸ˆ((€€€€‘¹½‘•É1¥ÍĞ€ô%¹Ù½­”µ¡•­•‘9…Ñ¥Ù”€µá•ÕÑ…‰±”€‘™µÁ•A…Ñ €µÉÕµ•¹ÑÌ  ˆµ¡¥‘•}‰…¹¹•Èˆ°€ˆµ•¹½‘•ÉÌˆ¤€µ•ÍÉ¥ÁÑ¥½¸€ˆ‘1…‰•°™™µÁ•œ€µ•¹½‘•ÉÌˆ(€€€¥˜€ ‘¹½‘•É1¥ÍĞ€µ¹½Ñµ…Ñ €ˆ ı´¥yqÌ©YqL©qÌ­µÁ•œÑqÌˆ¤ì(€€€€€€€Ñ¡É½Ü€ˆ‘1…‰•°µÁ•œ‰Õ¥±¡…Ì¹¼5@ĞµÁ•œĞÙ¥‘•¼•¹½‘•È¸ˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t€‘1…‰•°µÁ•œĞÙ¥‘•¼•¹½‘•È¥Ì…Ù…¥±…‰±”¸ˆ)ô()¥˜€ µ¹½Ğ€¡•Ğµ½µµ…¹€‘AåÑ¡½¸€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”¤¤ìÑ¡É½Ü€‰AåÑ¡½¸±…Õ¹¡•È€œ‘AåÑ¡½¸œİ…Ì¹½Ğ™½Õ¹¸ˆô(‘AåÑ¡½¹ÉÌ€ô  ¤)¥˜€¡mMåÍÑ•´¹%<¹A…Ñ¡tèé•Ñ¥±•9…µ•]¥Ñ¡½ÕÑáÑ•¹Í¥½¸ ‘AåÑ¡½¸¤€µ•Ä€‰Áäˆ¤ì€‘AåÑ¡½¹ÉÌ€ô  ˆ´Ì¸ÄÄˆ¤ô(˜€‘AåÑ¡½¸AåÑ¡½¹ÉÌ€µŒ€‰¥µÁ½ÉĞÍåÌì…ÍÍ•ÉĞÍåÌ¹Ù•ÉÍ¥½¹}¥¹™½lèÉt€ôô€ Ì°ÄÄ¤°ÍåÌ¹Ù•ÉÍ¥½¸ˆ)¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰AåÑ¡½¸€Ì¸ÄÄ¥ÌÉ•ÅÕ¥É•¸ˆô)¥˜€ µ¹½Ğ€‘M­¥Á±•…¸¤ìI•µ½Ù”µ%Ñ•´€µI•ÕÉÍ”€µ½É”€¹‰Õ¥±µÑ•µÀ°‘¥ÍĞ€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”ô)9•Üµ%Ñ•´€µ%Ñ•µQåÁ”¥É•Ñ½Éä€µ½É”Ñ½½±Ìğ=ÕĞµ9Õ±°((‘™µÁ•i¥À€ô)½¥¸µA…Ñ €‘•¹ØéQ5@€‰±¥Á™½É”µ™™µÁ•œµ±Á°µİ¥¸ØĞ¹é¥Àˆ(‘™µÁ•½İ¹±½…€ô€ˆ‘™µÁ•i¥À¹‘½İ¹±½…ˆ)]É¥Ñ”µ!½ÍĞ€‰½İ¹±½…‘¥¹œÁ¥¹¹•]¥¹‘½İÌàØĞ1A0µÁ•œÉ•±•…Í”€‘™µÁ•I•±•…Í•Q…œ¸¸¸ˆ)I•µ½Ù”µ%Ñ•´€µ1¥Ñ•É…±A…Ñ €‘™µÁ•½İ¹±½…€µ½É”€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”)ÑÉäì(€€€%¹Ù½­”µ]•‰I•ÅÕ•ÍĞ€µUÉ¤€‘™µÁ•UÉ°€µ=ÕÑ¥±”€‘™µÁ•½İ¹±½…€µQ¥µ•½ÕÑM•Œ€ÄàÀ€µÉÉ½ÉÑ¥½¸MÑ½À)ô…Ñ ì(€€€€‘½İ¹±½…‘ÉÉ½È€ô€‘|¹á•ÁÑ¥½¸¹5•ÍÍ…”(€€€I•µ½Ù”µ%Ñ•´€µ1¥Ñ•É…±A…Ñ €‘™µÁ•½İ¹±½…€µ½É”€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”(€€€¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘™µÁ•i¥À€µA…Ñ¡QåÁ”1•…˜¤¤ì(€€€€€€€Ñ¡É½Ü€‰½Õ±¹½Ğ‘½İ¹±½…µÁ•œ…É¡¥Ù”€œ‘™µÁ•É¡¥Ù•9…µ”œ™É½´€‘™µÁ•UÉ°…¹¹¼Ù•É¥™¥•…¡•½Áä•á¥ÍÑÌ¸€‘½İ¹±½…‘ÉÉ½Èˆ(€€€ô(€€€€‘…¡•‘M¡„ÈÔØ€ô€¡•Ğµ¥±•!…Í €µ1¥Ñ•É…±A…Ñ €‘™µÁ•i¥À€µ±½É¥Ñ¡´M!ÈÔØ¤¹!…Í ¹Q½1½İ•É%¹Ù…É¥…¹Ğ ¤(€€€¥˜€ ‘…¡•‘M¡„ÈÔØ€µ¹”€‘™µÁ•M¡„ÈÔØ¤ì(€€€€€€€Ñ¡É½Ü€‰µÁ•œ‘½İ¹±½…™…¥±•…¹Ñ¡”…¡•…É¡¥Ù”M!´ÈÔØ¥Ì¥¹Ù…±¥¸áÁ•Ñ•€‘™µÁ•M¡„ÈÔØì½Ğ€‘…¡•‘M¡„ÈÔØ¸€‘½İ¹±½…‘ÉÉ½Èˆ(€€€ô(€€€]É¥Ñ”µ]…É¹¥¹œ€‰µÁ•œ‘½İ¹±½…™…¥±•ìÕÍ¥¹œÑ¡”…¡•…É¡¥Ù”…™Ñ•È¥ÑÌÁ¥¹¹•M!´ÈÔØİ…ÌÙ•É¥™¥•¸ˆ)ô)¥˜€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘™µÁ•½İ¹±½…€µA…Ñ¡QåÁ”1•…˜¤ì(€€€5½Ù”µ%Ñ•´€µ1¥Ñ•É…±A…Ñ €‘™µÁ•½İ¹±½…€µ•ÍÑ¥¹…Ñ¥½¸€‘™µÁ•i¥À€µ½É”)ô)¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘™µÁ•i¥À€µA…Ñ¡QåÁ”1•…˜¤¤ì(€€€Ñ¡É½Ü€‰µÁ•œ‘½İ¹±½…‘¥¹½ĞÉ•…Ñ”Ñ¡”•áÁ•Ñ•…É¡¥Ù”è€‘™µÁ•i¥Àˆ)ô(‘ÑÕ…±M¡„ÈÔØ€ô€¡•Ğµ¥±•!…Í €µ1¥Ñ•É…±A…Ñ €‘™µÁ•i¥À€µ±½É¥Ñ¡´M!ÈÔØ¤¹!…Í ¹Q½1½İ•É%¹Ù…É¥…¹Ğ ¤)¥˜€ ‘ÑÕ…±M¡„ÈÔØ€µ¹”€‘™µÁ•M¡„ÈÔØ¤ì(€€€Ñ¡É½Ü€‰µÁ•œ…É¡¥Ù”M!´ÈÔØµ¥Íµ…Ñ ¸áÁ•Ñ•€‘™µÁ•M¡„ÈÔØì½Ğ€‘ÑÕ…±M¡„ÈÔØ¸I•™ÕÍ¥¹œÑ¼•áÑÉ…Ğ¥Ğ¸ˆ)ô)]É¥Ñ”µ!½ÍĞ€‰m=-tµÁ•œ…É¡¥Ù”M!´ÈÔØÙ•É¥™¥•è€‘ÑÕ…±M¡„ÈÔØˆ((‘áÑÉ…Ğ€ô)½¥¸µA…Ñ €‘•¹ØéQ5@€‰±¥Á™½É”µ™™µÁ•œ´‘™µÁ•I•±•…Í•Q…œˆ)I•µ½Ù”µ%Ñ•´€µI•ÕÉÍ”€µ½É”€‘áÑÉ…Ğ€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”)ÑÉäì(€€€áÁ…¹µÉ¡¥Ù”€µA…Ñ €‘™µÁ•i¥À€µ•ÍÑ¥¹…Ñ¥½¹A…Ñ €‘áÑÉ…Ğ€µ½É”€µÉÉ½ÉÑ¥½¸MÑ½À)ô…Ñ ì(€€€Ñ¡É½Ü€‰½Õ±¹½Ğ•áÑÉ…ĞÑ¡”Ù•É¥™¥•µÁ•œ…É¡¥Ù”€œ‘™µÁ•É¡¥Ù•9…µ”œ¸€ ‘|¹á•ÁÑ¥½¸¹5•ÍÍ…”¤ˆ)ô(‘™µÁ•5…Ñ¡•Ì€ô ¡•Ğµ¡¥±‘%Ñ•´€‘áÑÉ…Ğ€µ¥±Ñ•È™™µÁ•œ¹•á”€µ¥±”€µI•ÕÉÍ”¤(‘™ÁÉ½‰•5…Ñ¡•Ì€ô ¡•Ğµ¡¥±‘%Ñ•´€‘áÑÉ…Ğ€µ¥±Ñ•È™™ÁÉ½‰”¹•á”€µ¥±”€µI•ÕÉÍ”¤)¥˜€ ‘™µÁ•5…Ñ¡•Ì¹½Õ¹Ğ€µ¹”€Ä¤ìÑ¡É½Ü€‰µÁ•œ…É¡¥Ù”µÕÍĞ½¹Ñ…¥¸•á…Ñ±ä½¹”™™µÁ•œ¹•á”ì™½Õ¹€ ‘™µÁ•5…Ñ¡•Ì¹½Õ¹Ğ¤¸ˆô)¥˜€ ‘™ÁÉ½‰•5…Ñ¡•Ì¹½Õ¹Ğ€µ¹”€Ä¤ìÑ¡É½Ü€‰µÁ•œ…É¡¥Ù”µÕÍĞ½¹Ñ…¥¸•á…Ñ±ä½¹”™™ÁÉ½‰”¹•á”ì™½Õ¹€ ‘™ÁÉ½‰•5…Ñ¡•Ì¹½Õ¹Ğ¤¸ˆô(‘±±5…Ñ¡•Ì€ô ¡•Ğµ¡¥±‘%Ñ•´€‘áÑÉ…Ğ€µ¥±Ñ•È€¨¹‘±°€µ¥±”€µI•ÕÉÍ”¤)¥˜€ ‘±±5…Ñ¡•Ì¹½Õ¹Ğ€µ•Ä€À¤ìÑ¡É½Ü€‰Q¡”Í•±•Ñ•µÁ•œÍ¡…É•…É¡¥Ù”½¹Ñ…¥¹Ì¹¼11ÌìÉ•™ÕÍ¥¹œ…¸¥¹½µÁ±•Ñ”‰Õ¹‘±”¸ˆô((ŒÑ½½±Ì¼¥ÌÉ•Í•ÉÙ•™½È‰Õ¹‘±•µÁ•œ™¥±•Ì¸I•µ½Ù”ÍÑ…±”11Ì…¹½±±¥•¹Í”(Œ™¥±•Ì™¥ÉÍĞÍ¼„ÁÉ•Ù¥½ÕÌ‰Õ¥±…¹¹½Ğ±•…Ù”Õ¹É•±…Ñ•‰¥¹…É¥•Ì¥¸Aå%¹ÍÑ…±±•È¸)•Ğµ¡¥±‘%Ñ•´Ñ½½±Ì€µ¥±”ğ]¡•É”µ=‰©•Ğì(€€€€‘|¹áÑ•¹Í¥½¸€µ¥•Ä€ˆ¹‘±°ˆ€µ½È(€€€€‘|¹9…µ”€µµ…Ñ €‰x¡™™µÁ•ñ™™ÁÉ½‰”¥p¹•á”‘ñy=Ae%9p¹1A1ÙlÈÍt üép¸Ä¤üˆ)ôğI•µ½Ù”µ%Ñ•´€µ½É”)½Áäµ%Ñ•´€‘™µÁ•5…Ñ¡•ÍlÁt¹Õ±±9…µ”€¡)½¥¸µA…Ñ €‘I½½Ğ€‰Ñ½½±Íq™™µÁ•œ¹•á”ˆ¤€µ½É”)½Áäµ%Ñ•´€‘™ÁÉ½‰•5…Ñ¡•ÍlÁt¹Õ±±9…µ”€¡)½¥¸µA…Ñ €‘I½½Ğ€‰Ñ½½±Íq™™ÁÉ½‰”¹•á”ˆ¤€µ½É”)™½É•… € ‘±°¥¸€‘±±5…Ñ¡•Ì¤ì(€€€½Áäµ%Ñ•´€‘±°¹Õ±±9…µ”€¡)½¥¸µA…Ñ €‘I½½Ğ€ ‰Ñ½½±Ípˆ€¬€‘±°¹9…µ”¤¤€µ½É”)ô((ŒY…±¥‘…Ñ”Ñ¡”•á…Ğ‘¥É•Ñ½ÉäÑ¡…ĞAå%¹ÍÑ…±±•Èİ¥±°½±±•Ğ°¥¹±Õ‘¥¹œ…±°(ŒÍ¡…É•11ÌÉ•ÅÕ¥É•Ñ¼±…Õ¹ Ñ¡”•á•ÕÑ…‰±•Ì¸)ÍÍ•ÉĞµ™µÁ•	Õ¹‘±”€µ¥É•Ñ½Éä€¡)½¥¸µA…Ñ €‘I½½Ğ€‰Ñ½½±Ìˆ¤€µ1…‰•°€‰MÑ…•µÁ•œ‰Õ¹‘±”ˆ((‘1¥•¹Í•A…Ñ €ô)½¥¸µA…Ñ €‘I½½Ğ€‰Ñ½½±Íq=Ae%9¹1A1ØÌˆ(‘1¥•¹Í•M½ÕÉ•A…Ñ €ô)½¥¸µA…Ñ €‘I½½Ğ€‰±¥•¹Í•Íq=Ae%9¹1A1ØÌˆ)¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘1¥•¹Í•M½ÕÉ•A…Ñ €µA…Ñ¡QåÁ”1•…˜¤¤ì(€€€Ñ¡É½Ü€‰Q¡”¡•­•µ¥¸1A0ØÌ±¥•¹Í”Ñ•áĞ¥Ìµ¥ÍÍ¥¹œè€‘1¥•¹Í•M½ÕÉ•A…Ñ ˆ)ô(‘1¥•¹Í•Q•áÑM¡„ÈÔØ€ô€¡•Ğµ¥±•!…Í €µ1¥Ñ•É…±A…Ñ €‘1¥•¹Í•M½ÕÉ•A…Ñ €µ±½É¥Ñ¡´M!ÈÔØ¤¹!…Í ¹Q½1½İ•É%¹Ù…É¥…¹Ğ ¤)¥˜€ ‘1¥•¹Í•Q•áÑM¡„ÈÔØ€µ¹”€‘™µÁ•1¥•¹Í•Q•áÑM¡„ÈÔØ¤ì(€€€Ñ¡É½Ü€‰1A0±¥•¹Í”Ñ•áĞM!´ÈÔØµ¥Íµ…Ñ ¸áÁ•Ñ•€‘™µÁ•1¥•¹Í•Q•áÑM¡„ÈÔØì½Ğ€‘1¥•¹Í•Q•áÑM¡„ÈÔØ¸ˆ)ô)½Áäµ%Ñ•´€µ1¥Ñ•É…±A…Ñ €‘1¥•¹Í•M½ÕÉ•A…Ñ €µ•ÍÑ¥¹…Ñ¥½¸€‘1¥•¹Í•A…Ñ €µ½É”)]É¥Ñ”µ!½ÍĞ€‰m=-t=™™¥¥…°1A0ØÌ±¥•¹Í”Ñ•áĞM!´ÈÔØÙ•É¥™¥•è€‘1¥•¹Í•Q•áÑM¡„ÈÔØˆ()M•Ğµ½¹Ñ•¹Ğ€µA…Ñ €¡)½¥¸µA…Ñ €‘I½½Ğ€‰Q!%I}AIQe}9=Q%L¹ÑáĞˆ¤€µY…±Õ” ˆ)±¥Á½É”$Ñ¡¥ÉµÁ…ÉÑä½µÁ½¹•¹ÑÌ()µÁ•œè€‘™µÁ•1¥•¹Í”°]¥¹‘½İÌàØĞÍ¡…É•‰Õ¥±¸)É¡¥Ù”è€‘™µÁ•É¡¥Ù•9…µ”)É¡¥Ù”M!´ÈÔØè€‘™µÁ•M¡„ÈÔØ)I•±•…Í”è¡ÑÑÁÌè¼½¥Ñ¡Õˆ¹½´½µÁ•œµ	Õ¥±‘Ì½µÁ•œµ	Õ¥±‘Ì½É•±•…Í•Ì½Ñ…œ¼‘™µÁ•I•±•…Í•Q…œ)1¥•¹Í”Ñ•áĞèÑ½½±Íq=Ae%9¹1A1ØÌ€ ‘™µÁ•1¥•¹Í•UÉ°¤)µÁ•œÍ½ÕÉ”è¡ÑÑÁÌè¼½™™µÁ•œ¹½Éœ¼)M¡…É•µÁ•œ11Ì…É”‰Õ¹‘±•Ñ¼ÍÕÁÁ½ÉĞÉ•Á±…•µ•¹ĞÕ¹‘•È1A0Ñ•ÉµÌ¸()AåM¥‘”Ø€¼EĞ°™…ÍÑ•Èµİ¡¥ÍÁ•È°QÉ…¹Í±…Ñ”È…¹AåX…É”Ñ¡¥ÉµÁ…ÉÑä½µÁ½¹•¹ÑÌ)Õ¹‘•ÈÑ¡•¥ÈÉ•ÍÁ•Ñ¥Ù”±¥•¹Í•Ì¸½¹ÍÕ±ĞÕÁÍÑÉ•…´±¥•¹Í”™¥±•Ì¸(‰ €µ¹½‘¥¹œUQà((˜€‘AåÑ¡½¸AåÑ¡½¹ÉÌ€µ´Ù•¹Ø€¹Ù•¹Øµ‰Õ¥±)¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰½Õ±¹½ĞÉ•…Ñ”€¹Ù•¹Øµ‰Õ¥±İ¥Ñ AåÑ¡½¸€Ì¸ÄÄ¸ˆô(‘Y•¹ÙAåÑ¡½¸€ô)½¥¸µA…Ñ €‘I½½Ğ€ˆ¹Ù•¹Øµ‰Õ¥±‘qMÉ¥ÁÑÍqÁåÑ¡½¸¹•á”ˆ)¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘Y•¹ÙAåÑ¡½¸€µA…Ñ¡QåÁ”1•…˜¤¤ìÑ¡É½Ü€‰Y¥ÉÑÕ…°•¹Ù¥É½¹µ•¹ĞAåÑ¡½¸•á•ÕÑ…‰±”İ…Ì¹½ĞÉ•…Ñ•è€‘Y•¹ÙAåÑ¡½¸ˆô(˜€‘Y•¹ÙAåÑ¡½¸€µ´Á¥À¥¹ÍÑ…±°€´µÕÁÉ…‘”Á¥À)¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰	Õ¥±‘•Á•¹‘•¹ä‰½½ÑÍÑÉ…À™…¥±•İ¡¥±”ÕÁÉ…‘¥¹œÁ¥À¸ˆô(˜€‘Y•¹ÙAåÑ¡½¸€µ´Á¥À¥¹ÍÑ…±°€µÈÉ•ÅÕ¥É•µ•¹ÑÌµ‰Õ¥±¹ÑáĞ)¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰	Õ¥±‘•Á•¹‘•¹ä¥¹ÍÑ…±±…Ñ¥½¸™…¥±•¸ˆô(‘•¹ØéAQ €ô€ˆ¡)½¥¸µA…Ñ €‘I½½Ğ€Ñ½½±Ìœ¤ì‘•¹ØéAQ ˆ(˜€‘Y•¹ÙAåÑ¡½¸‰Õ¥±‘q¡•­}‘•Á•¹‘•¹¥•Ì¹Áä)¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰•Á•¹‘•¹ä¡•¬™…¥±•¸ˆô((Œ-••ÀÕ¹É•±…Ñ•¡½ÍĞ10‘¥É•Ñ½É¥•Ì€¡™½È•á…µÁ±”°„‰Õ¹‘±•A½ÁÁ±•È½%T¥¸(ŒÑ¡”½‘•àÉÕ¹Ñ¥µ”AQ ¤½ÕĞ½˜Aå%¹ÍÑ…±±•ÈÌ‘•Á•¹‘•¹äÉ•Í½±ÕÑ¥½¸¸µÁ•œ¥Ì(ŒÍÑ…•¥¸Ñ½½±ÌìÑ¡”É•µ…¥¹¥¹œ¹…Ñ¥Ù”‘•Á•¹‘•¹¥•Ì…É”½±±•Ñ•™É½´Ñ¡”(Œ‰Õ¥±Ù•¹Ø½ÈÉ•Í½±Ù•™É½´]¥¹‘½İÌÍåÍÑ•´‘¥É•Ñ½É¥•Ì¸(‘A…Ñ¡	•™½É•Aå%¹ÍÑ…±±•È€ô€‘•¹ØéAQ (‘Aå%¹ÍÑ…±±•ÉA…Ñ €ô  (€€€€¡)½¥¸µA…Ñ €‘I½½Ğ€‰Ñ½½±Ìˆ¤(€€€€¡)½¥¸µA…Ñ €‘I½½Ğ€ˆ¹Ù•¹Øµ‰Õ¥±‘qMÉ¥ÁÑÌˆ¤(€€€€¡)½¥¸µA…Ñ €‘•¹ØéMåÍÑ•µI½½Ğ€‰MåÍÑ•´ÌÈˆ¤(€€€€‘•¹ØéMåÍÑ•µI½½Ğ(¤ğM•±•Ğµ=‰©•Ğ€µU¹¥ÅÕ”(‘•¹ØéAQ €ô€‘Aå%¹ÍÑ…±±•ÉA…Ñ €µ©½¥¸mMåÍÑ•´¹%<¹A…Ñ¡tèéA…Ñ¡M•Á…É…Ñ½È)ÑÉäì(€€€€˜€‘Y•¹ÙAåÑ¡½¸€µ´Aå%¹ÍÑ…±±•È€´µ¹½½¹™¥É´€´µ±•…¸€´µİ½É­Á…Ñ €¹‰Õ¥±µÑ•µÀ±¥Á™½É”¹ÍÁ•Œ(€€€€‘Aå%¹ÍÑ…±±•Éá¥Ñ½‘”€ô€‘1MQa%Q=)ô™¥¹…±±äì(€€€€‘•¹ØéAQ €ô€‘A…Ñ¡	•™½É•Aå%¹ÍÑ…±±•È)ô)¥˜€ ‘Aå%¹ÍÑ…±±•Éá¥Ñ½‘”€µ¹”€À¤ìÑ¡É½Ü€‰Aå%¹ÍÑ…±±•È™…¥±•¸ˆô((‘A½ÉÑ…‰±•¥É•Ñ½Éä€ô)½¥¸µA…Ñ €‘I½½Ğ€‰‘¥ÍÑq±¥Á½É•$ˆ(‘U¹•áÁ•Ñ•‘%Õ±±Ì€ô ¡•Ğµ¡¥±‘%Ñ•´€µ1¥Ñ•É…±A…Ñ €‘A½ÉÑ…‰±•¥É•Ñ½Éä€µ¥±Ñ•È€‰¥Ô¨¹‘±°ˆ€µ¥±”€µI•ÕÉÍ”¤)¥˜€ ‘U¹•áÁ•Ñ•‘%Õ±±Ì¹½Õ¹Ğ€µĞ€À¤ì(€€€€‘U¹•áÁ•Ñ•‘9…µ•Ì€ô€ ‘U¹•áÁ•Ñ•‘%Õ±±Ìğ½É… µ=‰©•Ğì€‘|¹Õ±±9…µ”ô¤€µ©½¥¸€ˆ°€ˆ(€€€Ñ¡É½Ü€‰Aå%¹ÍÑ…±±•È‰Õ¹‘±•%T11Ì™É½´Ñ¡”‰Õ¥±¡½ÍĞ¸Q¡•Í”…¸Í¡…‘½ÜÑ¡”]¥¹‘½İÌ%TÉ•ÅÕ¥É•‰äEĞè€‘U¹•áÁ•Ñ•‘9…µ•Ìˆ)ô(‘A…­…•‘Q½½±Í¥É•Ñ½Éä€ô)½¥¸µA…Ñ €‘A½ÉÑ…‰±•¥É•Ñ½Éä€‰}¥¹Ñ•É¹…±qÑ½½±Ìˆ)¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘A…­…•‘Q½½±Í¥É•Ñ½Éä€µA…Ñ¡QåÁ”½¹Ñ…¥¹•È¤¤ì(€€€€ŒAå%¹ÍÑ…±±•È€Ø¸ÄÈ¬ÍÑ½É•Ì½¹”µ™½±‘•ÈÁ…å±½…™¥±•Ì¥¸}¥¹Ñ•É¹…°¸=±‘•È€Ø¹à(€€€€ŒÉ•±•…Í•ÌÁ±…”Ñ¡•´‰•Í¥‘”Ñ¡”•á•ÕÑ…‰±”ì‰½Ñ ±…å½ÕÑÌµ…Ñ ÍåÌ¹}5%AML¸(€€€€‘A…­…•‘Q½½±Í¥É•Ñ½Éä€ô)½¥¸µA…Ñ €‘A½ÉÑ…‰±•¥É•Ñ½Éä€‰Ñ½½±Ìˆ)ô)™½É•… € ‘I•ÅÕ¥É•‘¥±”¥¸  ‰™™µÁ•œ¹•á”ˆ°€‰™™ÁÉ½‰”¹•á”ˆ°€‰=Ae%9¹1A1ØÌˆ¤¤ì(€€€€‘A…­…•‘A…Ñ €ô)½¥¸µA…Ñ €‘A…­…•‘Q½½±Í¥É•Ñ½Éä€‘I•ÅÕ¥É•‘¥±”(€€€¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘A…­…•‘A…Ñ €µA…Ñ¡QåÁ”1•…˜¤¤ì(€€€€€€€Ñ¡É½Ü€‰Aå%¹ÍÑ…±±•ÈÁ½ÉÑ…‰±”‰Õ¥±¥Ìµ¥ÍÍ¥¹œÉ•ÅÕ¥É•µÁ•œ™¥±”è€‘A…­…•‘A…Ñ ˆ(€€€ô)ô)ÍÍ•ÉĞµ™µÁ•	Õ¹‘±”€µ¥É•Ñ½Éä€‘A…­…•‘Q½½±Í¥É•Ñ½Éä€µ1…‰•°€‰Aå%¹ÍÑ…±±•ÈÁ½ÉÑ…‰±”‰Õ¹‘±”ˆ)½Áäµ%Ñ•´I5¹µ°%}5=1L¹µ°Q!%I}AIQe}9=Q%L¹ÑáĞ°%9MQ11}$¹‰…Ğ€µ•ÍÑ¥¹…Ñ¥½¸€‘A½ÉÑ…‰±•¥É•Ñ½Éä€µ½É”)]É¥Ñ”µ!½ÍĞ€‰A½ÉÑ…‰±”™½±‘•ÈÉ•…Ñ•è‘¥ÍÑq±¥Á½É•$ˆ€µ½É•É½Õ¹‘½±½ÈÉ••¸((‘%Í½µµ…¹€ô•Ğµ½µµ…¹%M¹•á”€µÉÉ½ÉÑ¥½¸M¥±•¹Ñ±å½¹Ñ¥¹Õ”(‘%ÍA…Ñ €ô¥˜€ ‘%Í½µµ…¹¤ì€‘%Í½µµ…¹¹M½ÕÉ”ô•±Í”ì€‘¹Õ±°ô)¥˜€ µ¹½Ğ€‘%ÍA…Ñ ¤ì(€€€€‘…¹‘¥‘…Ñ”€ô€ˆ‘•¹ØéAÉ½É…µ¥±•Ì¡ààØ¥q%¹¹¼M•ÑÕÀ€Ùq%M¹•á”ˆ(€€€¥˜€¡Q•ÍĞµA…Ñ €‘…¹‘¥‘…Ñ”¤ì€‘%ÍA…Ñ €ô€‘…¹‘¥‘…Ñ”ô)ô)¥˜€ ‘%ÍA…Ñ ¤ì(€€€9•Üµ%Ñ•´€µ%Ñ•µQåÁ”¥É•Ñ½Éä€µ½É”‘¥ÍÑq¥¹ÍÑ…±±•Èğ=ÕĞµ9Õ±°(€€€€˜€‘%ÍA…Ñ ¥¹ÍÑ…±±•Éq±¥Á½É•$¹¥ÍÌ(€€€¥˜€ ‘1MQa%Q=€µ¹”€À¤ìÑ¡É½Ü€‰%¹¹¼M•ÑÕÀ½µÁ¥±…Ñ¥½¸™…¥±•¸ˆô(€€€€‘%¹ÍÑ…±±•È€ô)½¥¸µA…Ñ €‘I½½Ğ€‰‘¥ÍÑq¥¹ÍÑ…±±•Éq±¥Á½É•$µM•ÑÕÀ´À¸Ì¸ÀµàØĞ¹•á”ˆ(€€€¥˜€ µ¹½Ğ€¡Q•ÍĞµA…Ñ €µ1¥Ñ•É…±A…Ñ €‘%¹ÍÑ…±±•È€µA…Ñ¡QåÁ”1•…˜¤€µ½È€¡•Ğµ%Ñ•´€‘%¹ÍÑ…±±•È¤¹1•¹Ñ €µ•Ä€À¤ì(€€€€€€€Ñ¡É½Ü€‰%¹¹¼M•ÑÕÀÉ•Á½ÉÑ•ÍÕ•ÍÌ‰ÕĞ‘¥¹½ĞÉ•…Ñ”Ñ¡”•áÁ•Ñ•¥¹ÍÑ…±±•Èè€‘%¹ÍÑ…±±•Èˆ(€€€ô(€€€]É¥Ñ”µ!½ÍĞ€‰m=-t%¹¹¼M•ÑÕÀ¥¹ÍÑ…±±•ÈÉ•…Ñ•è‘¥ÍÑq¥¹ÍÑ…±±•Éq±¥Á½É•$µM•ÑÕÀ´À¸Ì¸ÀµàØĞ¹•á”ˆ)ô•±Í”ì]É¥Ñ”µ]…É¹¥¹œ€‰%¹¹¼M•ÑÕÀ€Ø¹½Ğ™½Õ¹ì¥¹ÍÑ…±±•ÈÍ­¥ÁÁ•¸ˆô
+            values=[str(c.get("score", "â€”")), c.get("title", c.get("reason", "AI clip")), self.fmt(c["start"]), self.fmt(c["end"]), c.get("reason", "")]
+            for j,value in enumerate(values): self.ai_table.setItem(i,j,QTableWidgetItem(value))
+            self.ai_table.item(i,0).setData(Qt.UserRole, i)
+        if not clips: self.ai_status.setText(self.ai_status.text()+" Ğ ĞµÑ‡ĞµĞ²Ñ‹Ñ… Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚Ğ¾Ğ² Ğ´Ğ»Ñ Ğ½Ğ°Ñ€ĞµĞ·ĞºĞ¸ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ğ¾.")
+
+    def ai_analysis_failed(self, error):
+        self.ai_run_btn.setEnabled(True); self.ai_progress.hide(); self.ai_status.setText("ĞÑˆĞ¸Ğ±ĞºĞ° AI-Ğ°Ğ½Ğ°Ğ»Ğ¸Ğ·Ğ°")
+        QMessageBox.critical(self, "AI-Ğ°Ğ½Ğ°Ğ»Ğ¸Ğ· Ğ½Ğµ Ğ²Ñ‹Ğ¿Ğ¾Ğ»Ğ½ĞµĞ½", error)
+
+    def use_selected_ai_clip(self):
+        row=self.ai_table.currentRow()
+        if row<0 or row>=len(self.ai_clips):
+            QMessageBox.information(self, "Ğ’Ñ‹Ğ±ĞµÑ€Ğ¸ Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚", "Ğ’Ñ‹Ğ´ĞµĞ»Ğ¸ ÑÑ‚Ñ€Ğ¾ĞºÑƒ Ğ² Ñ‚Ğ°Ğ±Ğ»Ğ¸Ñ†Ğµ AI Analyzer."); return
+        clip=self.ai_clips[row]; self.start_spin.setValue(float(clip["start"])); self.end_spin.setValue(float(clip["end"]))
+        self.status.setText("AI-Ñ„Ñ€Ğ°Ğ³Ğ¼ĞµĞ½Ñ‚ Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½ â€” Ğ¼Ğ¾Ğ¶Ğ½Ğ¾ Ğ¿ĞµÑ€ĞµĞ¹Ñ‚Ğ¸ Ğ² Â«ĞĞ±Ğ·Ğ¾Ñ€Â» Ğ¸ Ñ€ĞµĞ½Ğ´ĞµÑ€Ğ¸Ñ‚ÑŒ.")
+
+    def select_ai_clip(self, row, column):
+        self.use_selected_ai_clip()
+
+    def render_done(self,path):
+        self.render_btn.setEnabled(True); self.progress.hide()
+        metadata=self.pending_export_metadata.pop(path,None)
+        if metadata:
+            try:
+                Path(path).with_suffix(".json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding="utf-8")
+            except OSError as exc:
+                QMessageBox.warning(self,"ĞœĞµÑ‚Ğ°Ğ´Ğ°Ğ½Ğ½Ñ‹Ğµ ÑĞºÑĞ¿Ğ¾Ñ€Ñ‚Ğ°",f"ĞšĞ»Ğ¸Ğ¿ Ğ³Ğ¾Ñ‚Ğ¾Ğ², Ğ½Ğ¾ Ñ„Ğ°Ğ¹Ğ» Ñ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸ĞºĞ¾Ğ¼ Ğ¸ ĞºĞ¾Ğ¼Ğ¼ĞµĞ½Ñ‚Ğ°Ñ€Ğ¸ĞµĞ¼ ÑĞ¾Ñ…Ñ€Ğ°Ğ½Ğ¸Ñ‚ÑŒ Ğ½Ğµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ:\n{exc}")
+        self.cleanup_render_overlay(path); self.refresh_exports(); QMessageBox.information(self,"Ğ“Ğ¾Ñ‚Ğ¾Ğ²Ğ¾",f"ĞšĞ»Ğ¸Ğ¿ ÑĞ¾Ñ…Ñ€Ğ°Ğ½Ñ‘Ğ½:\n{path}")
+
+    def render_failed(self,error):
+        self.render_btn.setEnabled(True); self.progress.hide(); self.pending_export_metadata.pop(self.worker.output,None); self.cleanup_render_overlay(self.worker.output); QMessageBox.critical(self,"ĞÑˆĞ¸Ğ±ĞºĞ° Ñ€ĞµĞ½Ğ´ĞµÑ€Ğ¸Ğ½Ğ³Ğ°",error)
+
+    def cleanup_render_overlay(self,path):
+        overlay=self.pending_overlay_paths.pop(path,None)
+        if overlay:
+            try: Path(overlay).unlink(missing_ok=True)
+            except OSError: pass
+
+    def refresh_exports(self):
+        files=sorted(EXPORTS.glob("*.mp4"),key=lambda p:p.stat().st_mtime,reverse=True)
+        self.exports.clear()
+        for p in files[:8]: self.exports.addItem(QListWidgetItem(p.name))
+        if hasattr(self,"export_table"):
+            self.export_table.setRowCount(len(files))
+            for i,p in enumerate(files): self.export_table.setItem(i,0,QTableWidgetItem(p.name)); self.export_table.setItem(i,1,QTableWidgetItem(str(p)))
+
+
+def main():
+    app=QApplication(sys.argv); app.setApplicationName(APP_NAME); app.setFont(QFont("Segoe UI",10)); w=MainWindow(); w.show(); sys.exit(app.exec())
+if __name__=="__main__": main()
