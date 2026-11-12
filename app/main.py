@@ -3,8 +3,8 @@ import json, os, re, shutil, subprocess, sys, uuid
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QFont, QFontMetrics, QColor, QDesktopServices, QImage, QPainter, QRect
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QRect
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QDesktopServices, QImage, QPainter
 from ai_engine import run_analysis
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
